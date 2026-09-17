@@ -1,0 +1,32 @@
+# Data and generated artifacts (large, regenerable from code)
+data/
+checkpoints/
+crop_cache/
+spine_crop_cache/
+spine_crop_cache_full/
+real_hint_cache/
+watershed_cache/
+yolo_data/
+yolo_runs/
+runs/
+weights/
+scratch/
+scratch_notebooks/
+*.pt
+*.npy
+*.csv
+
+# Copyrighted / third-party material -- not ours to redistribute
+*.pdf
+paper_dump.txt
+
+# Logs (local run history; results are captured in commit messages instead)
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local tooling config
+.claude/
