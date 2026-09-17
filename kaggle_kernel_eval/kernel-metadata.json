@@ -1,0 +1,12 @@
+{
+  "id": "trishanthmellimi/filament-yolo-imgsz-eval",
+  "title": "filament-yolo-imgsz-eval",
+  "code_file": "eval_val.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["trishanthmellimi/filament-seg-checkpoints"],
+  "competition_sources": ["filament-segmentation-2026"]
+}

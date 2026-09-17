@@ -17,6 +17,7 @@
 | 0.36 | Loosened ensemble candidate floor (0.50 -> 0.35), locally better, real regression (confirmed twice) |
 | 0.36 | Solo YOLO11s-seg detector + proven crop-refine refiner (matches 0.37 pipeline, different architecture) |
 | **0.37** | + confidence threshold tuned (0.25 -> 0.35 via single-axis cached sweep) -- **ties current best, single detector** |
+| 0.37 | + inference resolution raised (imgsz 1280 -> 1536), local val PQ 0.4114 -> 0.4131, TP 495 -> 519 -- **ties best, real gain too small to move the leaderboard score** |
 
 See `README.md` for the architecture writeup and the full table of rejected
 approaches with local numbers, and individual commit messages for the
