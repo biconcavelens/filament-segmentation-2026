@@ -1,42 +1,41 @@
-"""Self-contained Kaggle kernel: YOLO11m-seg (up from 11s) + crop-refine
-U-Net, at the already-validated imgsz=1280/conf=0.35 config -- a clean
-single-axis test of model capacity, holding everything else fixed. Local
-val PQ 0.4114 (11s) -> 0.4171 (11m), TP 495 -> 504.
-
-For the resolution axis: imgsz=1536 alone tied the real score without a
-genuine gain, and imgsz=1792 with confidence re-tuned (found via a 2-axis
-grid sweep, local PQ 0.4187) actually *regressed* the real score to 0.36
-despite looking like the best local result yet -- see README.md's "What's
-been tried and rejected". Do not re-raise IMGSZ/YOLO_CONF together without
-new evidence; this run deliberately keeps them at the validated values.
-
-Runs entirely on Kaggle's GPU so it doesn't contend with local GPU use.
-Ultralytics's own square-letterbox resize handles the upscale; everything
-else (refiner, panoptic paint, RLE) is copied inline since we can't import
-the local repo's modules here.
+"""Evaluate the newly-trained YOLO11m-seg checkpoint at the already-validated
+imgsz=1280/conf=0.35 config (real PQ 0.37 for the s-variant), on the same
+116-image val split. Single categorical change (model capacity), everything
+else held at known-good settings -- keeping this a clean single-axis test
+after the imgsz x conf 2-axis sweep regressed the real score despite a
+better local number. Detector-level mask mAP50 during training was nearly
+identical to the s-variant (0.664 vs 0.668), so this checks whether that
+holds through the full refiner pipeline too.
 """
 import subprocess
 import sys
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "ultralytics"], check=True)
 
+import json
+import random
+from pathlib import Path
+
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
-from pathlib import Path
+import pycocotools.mask as mu
 from PIL import Image
 from ultralytics import YOLO
-import pycocotools.mask as mu
 
 DATA = Path("/kaggle/input/competitions/filament-segmentation-2026/MAGFiLO_1.0_Kaggle_2026")
-TEST_DIR = DATA / "test" / "test_images"
+IMG_DIR = DATA / "train" / "train_images"
+ANN_PATH = DATA / "train" / "MAGFiLO_1.0_Annotations_kaggle2026_train.json"
 CKPT = Path("/kaggle/input/datasets/trishanthmellimi/filament-seg-checkpoints")
 
-H, W = 2048, 2048  # matches dataset.py
+H, W = 2048, 2048
 CROP_SIZE = 256
-YOLO_CONF = 0.35  # confirmed-best real config -- see module docstring
+YOLO_CONF = 0.35
 MIN_AREA = 20
-IMGSZ = 1280  # confirmed-best real config -- see module docstring
+CONTEXT = 1.8
+MIN_CROP = 96
+REFINER_THRESHOLD = 0.5
+TTA_AREA_RATIO_MIN = 0.60
+TTA_AREA_RATIO_MAX = 1.70
 
 
 class ConvBlock(nn.Sequential):
@@ -48,9 +47,6 @@ class ConvBlock(nn.Sequential):
 
 
 class RefinerUNet(nn.Module):
-    """Exact copy of train_refiner.py's architecture -- must match the
-    checkpoint's state_dict exactly (bias=False convs, 'head' not 'out')."""
-
     def __init__(self, features=32, in_channels=1, out_channels=1):
         super().__init__()
         f = features
@@ -85,12 +81,7 @@ class RefinerUNet(nn.Module):
         return self.head(d1)
 
 
-CONTEXT = 1.8
-MIN_CROP = 96
-
-
 def square_bounds(mask, context=CONTEXT, minimum=MIN_CROP):
-    """Exact copy of crop_dataset.py's square_bounds."""
     height, width = mask.shape
     ys, xs = np.where(mask)
     cx, cy = (xs.min() + xs.max() + 1) / 2, (ys.min() + ys.max() + 1) / 2
@@ -109,14 +100,8 @@ def square_bounds(mask, context=CONTEXT, minimum=MIN_CROP):
     return x0, y0, x1, y1
 
 
-REFINER_THRESHOLD = 0.5
-TTA_AREA_RATIO_MIN = 0.60
-TTA_AREA_RATIO_MAX = 1.70
-
-
 @torch.no_grad()
-def refine_with_tta(refiner, device, x: np.ndarray) -> np.ndarray:
-    """Exact copy of predict_refined.py's refine_with_tta. x: (C,256,256)."""
+def refine_with_tta(refiner, device, x):
     views = {
         "identity": x,
         "hflip": x[:, :, ::-1],
@@ -134,12 +119,10 @@ def refine_with_tta(refiner, device, x: np.ndarray) -> np.ndarray:
         elif name == "hvflip":
             p = np.flipud(np.fliplr(p))
         probs[name] = p
-
     identity_area = (probs["identity"] > REFINER_THRESHOLD).sum()
     avg_prob = np.mean(list(probs.values()), axis=0)
     if identity_area == 0:
         return avg_prob
-
     avg_area = (avg_prob > REFINER_THRESHOLD).sum()
     ratio = avg_area / identity_area
     if ratio < TTA_AREA_RATIO_MIN or ratio > TTA_AREA_RATIO_MAX:
@@ -165,14 +148,29 @@ def paint_panoptic(candidates, min_area=20):
     return kept
 
 
+def train_val_split(val_frac=0.1, seed=0):
+    with open(ANN_PATH, encoding="utf-8") as f:
+        coco = json.load(f)
+    per_image = {}
+    for a in coco["annotations"]:
+        per_image.setdefault(a["image_id"], []).append(a)
+    images = coco["images"]
+    files = sorted(set(i["file_name"] for i in images))
+    rng = random.Random(seed)
+    rng.shuffle(files)
+    n_val = max(1, int(len(files) * val_frac))
+    val_files = set(files[:n_val])
+    val_entries = [i for i in images if i["file_name"] in val_files]
+    return val_entries, per_image
+
+
 @torch.no_grad()
-def predict_one(yolo, refiner, device, gray, img_path):
-    out = yolo.predict(source=str(img_path), imgsz=IMGSZ, conf=YOLO_CONF, verbose=False)[0]
+def predict_one(yolo, refiner, device, gray, img_path, imgsz):
+    out = yolo.predict(source=str(img_path), imgsz=imgsz, conf=YOLO_CONF, verbose=False)[0]
     if out.boxes is None or len(out.boxes) == 0:
         return []
     boxes = out.boxes.xyxy.cpu().numpy()
     scores = out.boxes.conf.cpu().numpy()
-
     candidates = []
     for j in range(len(boxes)):
         x0, y0, x1, y1 = boxes[j]
@@ -181,7 +179,6 @@ def predict_one(yolo, refiner, device, gray, img_path):
             continue
         coarse = np.zeros((H, W), dtype=np.uint8)
         coarse[y0:y1, x0:x1] = 1
-
         cx0, cy0, cx1, cy1 = square_bounds(coarse.astype(bool))
         crop = np.array(Image.fromarray(gray[cy0:cy1, cx0:cx1]).resize(
             (CROP_SIZE, CROP_SIZE), Image.BILINEAR)).astype(np.float32) / 255.0
@@ -195,8 +192,35 @@ def predict_one(yolo, refiner, device, gray, img_path):
         if full_mask.sum() == 0:
             continue
         candidates.append((float(scores[j]), full_mask))
-
     return paint_panoptic(candidates, MIN_AREA)
+
+
+def eval_pq(yolo, refiner, device, val_entries, per_image, imgsz):
+    pq_num = pq_den = 0.0
+    tp = 0
+    for i, e in enumerate(val_entries, 1):
+        img_path = IMG_DIR / e["file_name"]
+        gray = np.array(Image.open(img_path).convert("L"))
+        kept = predict_one(yolo, refiner, device, gray, img_path, imgsz)
+        pred = [{"size": [H, W], "counts": to_rle(m).encode()} for m in kept]
+        gt = []
+        for a in per_image.get(e["id"], []):
+            rles = mu.frPyObjects(a["segmentation"], H, W)
+            gt.append({"size": [H, W], "counts": to_rle(mu.decode(mu.merge(rles))).encode()})
+        if pred and gt:
+            iou = mu.iou(pred, gt, [0] * len(gt))
+            best_per_gt = iou.max(axis=0); best_per_pred = iou.max(axis=1)
+        else:
+            best_per_gt = np.zeros(len(gt)); best_per_pred = np.zeros(len(pred))
+        m_tp = int((best_per_gt > 0.5).sum())
+        tp += m_tp
+        n_fp = len(pred) - m_tp
+        n_fn = len(gt) - m_tp
+        pq_num += float(best_per_gt[best_per_gt > 0.5].sum())
+        pq_den += m_tp + 0.5 * n_fp + 0.5 * n_fn
+        if i % 20 == 0:
+            print(f"  imgsz={imgsz}: {i}/{len(val_entries)}", flush=True)
+    return pq_num / pq_den if pq_den else 0.0, tp
 
 
 def main():
@@ -207,22 +231,14 @@ def main():
                            out_channels=rstate.get("out_channels", 1)).to(device)
     refiner.load_state_dict(rstate["model"])
     refiner.eval()
-    print(f"loaded models on {device}, imgsz={IMGSZ}")
 
-    files = sorted(TEST_DIR.iterdir())
-    rows = []
-    for i, path in enumerate(files, 1):
-        gray = np.array(Image.open(path).convert("L"))
-        kept = predict_one(yolo, refiner, device, gray, path)
-        stem = path.stem
-        rows.extend({"filament_id": f"{stem}_{k}", "segmentation_rle": to_rle(m)}
-                    for k, m in enumerate(kept, 1))
-        if i % 20 == 0:
-            print(f"{i}/{len(files)}", flush=True)
+    val_entries, per_image = train_val_split()
+    print(f"val entries: {len(val_entries)}")
 
-    pd.DataFrame(rows, columns=["filament_id", "segmentation_rle"]).to_csv(
-        "submission.csv", index=False)
-    print(f"wrote submission.csv: {len(rows)} rows, {len(files)} images")
+    for imgsz in (1280,):
+        pq, tp = eval_pq(yolo, refiner, device, val_entries, per_image, imgsz)
+        print(f"=== YOLO11m imgsz={imgsz}: PQ={pq:.4f} TP={tp} "
+              f"(s-variant baseline: PQ=0.4114 TP=495) ===", flush=True)
 
 
 if __name__ == "__main__":
