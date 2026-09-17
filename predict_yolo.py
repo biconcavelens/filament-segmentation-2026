@@ -24,7 +24,7 @@ from predict_refined import refine_with_tta
 D = Path("data/MAGFiLO_1.0_Kaggle_2026")
 TEST_DIR = D / "test" / "test_images"
 
-YOLO_CONF = 0.25
+YOLO_CONF = 0.35  # swept in sweep_yolo_solo.py: local PQ 0.4095 (0.25) -> 0.4117 (0.35)
 MIN_AREA = 20
 CHUNK_SIZE = 20
 COOLDOWN_SECONDS = 15
