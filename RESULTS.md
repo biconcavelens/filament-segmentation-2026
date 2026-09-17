@@ -18,6 +18,7 @@
 | 0.36 | Solo YOLO11s-seg detector + proven crop-refine refiner (matches 0.37 pipeline, different architecture) |
 | **0.37** | + confidence threshold tuned (0.25 -> 0.35 via single-axis cached sweep) -- **ties current best, single detector** |
 | 0.37 | + inference resolution raised (imgsz 1280 -> 1536), local val PQ 0.4114 -> 0.4131, TP 495 -> 519 -- **ties best, real gain too small to move the leaderboard score** |
+| 0.36 | + imgsz raised further to 1792 with confidence re-tuned (0.40), found via a resolution x confidence grid sweep: local val PQ 0.4114 -> 0.4187 (largest local gain of the whole YOLO tuning line, smooth single peak) -- **real regression despite the strongest local signal yet; reverted to imgsz=1280/conf=0.35 (0.37) as current best** |
 
 See `README.md` for the architecture writeup and the full table of rejected
 approaches with local numbers, and individual commit messages for the

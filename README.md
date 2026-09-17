@@ -57,6 +57,17 @@ evidence):
 - More detector epochs (8 -> 12), more refiner crop context (1.8x -> 2.5x),
   more refiner resolution (256px -> 384px): all landed flat-to-negative
   locally, not submitted
+- YOLO inference resolution raised further with confidence re-tuned at each
+  step (imgsz 1792, conf 0.40, found via a resolution x confidence grid
+  sweep on the val set): local PQ 0.411 -> 0.419, the largest local gain of
+  the whole YOLO tuning line and a smooth single peak -- real PQ 0.37 ->
+  0.36. **Refines the methodology lesson below**: it isn't enough for a
+  sweep to look smooth: a *2-axis* grid over a 116-image val set overfits
+  even when each individual axis looks clean, the same failure mode as the
+  ensemble AGREE/UNIQUE grid search. A single new resolution value
+  (imgsz 1536, confidence left at its already-validated 1280 setting) tied
+  the real score instead of regressing it -- so the risk is specifically in
+  jointly re-optimizing two axes at once, not in testing resolution itself.
 
 ## Known leaderboard contamination
 

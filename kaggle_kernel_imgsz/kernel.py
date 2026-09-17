@@ -1,7 +1,14 @@
-"""Self-contained Kaggle kernel: YOLO11s-seg + crop-refine U-Net at imgsz=1536
-(up from the locally-validated 1280), testing whether higher inference
-resolution improves thin-filament detection -- this session's core recurring
-finding is that resolution/visibility of thin structures is the bottleneck.
+"""Self-contained Kaggle kernel: YOLO11s-seg + crop-refine U-Net, at the
+confirmed-best real config (imgsz=1280, conf=0.35, real PQ 0.37).
+
+Reverted here after two resolution experiments: imgsz=1536 alone tied the
+real score without a genuine gain, and imgsz=1792 with confidence re-tuned
+(found via a 2-axis grid sweep, local PQ 0.4187 -- the largest local gain of
+the whole YOLO line) actually *regressed* the real score to 0.36 despite
+looking like the best local result yet. See README.md's "What's been tried
+and rejected" section: a smooth-looking 2-axis sweep over a 116-image val
+set still overfits, the same failure mode as the earlier ensemble grid
+search. Do not re-raise IMGSZ/YOLO_CONF together without new evidence.
 
 Runs entirely on Kaggle's GPU so it doesn't contend with local GPU use.
 Ultralytics's own square-letterbox resize handles the upscale; everything
@@ -27,9 +34,9 @@ CKPT = Path("/kaggle/input/datasets/trishanthmellimi/filament-seg-checkpoints")
 
 H, W = 2048, 2048  # matches dataset.py
 CROP_SIZE = 256
-YOLO_CONF = 0.35
+YOLO_CONF = 0.35  # confirmed-best real config -- see module docstring
 MIN_AREA = 20
-IMGSZ = 1536  # <-- the lever under test (baseline was 1280)
+IMGSZ = 1280  # confirmed-best real config -- see module docstring
 
 
 class ConvBlock(nn.Sequential):

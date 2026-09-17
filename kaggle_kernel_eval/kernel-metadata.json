@@ -1,7 +1,7 @@
 {
   "id": "trishanthmellimi/filament-yolo-imgsz-eval",
   "title": "filament-yolo-imgsz-eval",
-  "code_file": "eval_val.py",
+  "code_file": "sweep_imgsz_conf.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
