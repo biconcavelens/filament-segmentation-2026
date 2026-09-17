@@ -1,7 +1,7 @@
 {
-  "id": "trishanthmellimi/filament-yolo-imgsz-eval",
-  "title": "filament-yolo-imgsz-eval",
-  "code_file": "eval_val_selftrain.py",
+  "id": "trishanthmellimi/filament-yolo11m-selftrain",
+  "title": "filament-yolo11m-selftrain",
+  "code_file": "train_selftrain.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,

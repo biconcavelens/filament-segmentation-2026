@@ -20,6 +20,7 @@
 | 0.37 | + inference resolution raised (imgsz 1280 -> 1536), local val PQ 0.4114 -> 0.4131, TP 495 -> 519 -- **ties best, real gain too small to move the leaderboard score** |
 | 0.36 | + imgsz raised further to 1792 with confidence re-tuned (0.40), found via a resolution x confidence grid sweep: local val PQ 0.4114 -> 0.4187 (largest local gain of the whole YOLO tuning line, smooth single peak) -- **real regression despite the strongest local signal yet; reverted to imgsz=1280/conf=0.35 (0.37) as current best** |
 | 0.37 | YOLO11m-seg (up from 11s) trained from scratch on Kaggle GPU, same validated imgsz=1280/conf=0.35 config: local val PQ 0.4114 -> 0.4171, TP 495 -> 504 -- **ties best, third genuine single-axis local win in a row (confidence tune, this) that caps at 0.37; solo-detector family looks plateaued at this ceiling** |
+| (not submitted) | Self-training: retrained YOLO11m on real train + 116 strictly-filtered pseudo-labeled test images (conf>=0.75, 244 polygons). Local val PQ 0.4171 -> **0.3931, TP 504 -> 420 -- clear regression**, not submitted |
 
 See `README.md` for the architecture writeup and the full table of rejected
 approaches with local numbers, and individual commit messages for the

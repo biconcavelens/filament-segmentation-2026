@@ -97,6 +97,20 @@ evidence):
   "TTA doesn't help" so much as a sign the flag had no effect at all for
   this segmentation task/model combination in this ultralytics version --
   inconclusive, not a real negative result about TTA's potential.
+- Self-training: every architecture/capacity change plateauing at the same
+  real ceiling suggested a data-limited regime, so retrained YOLO11m on the
+  real training set *plus* 116 test images pseudo-labeled by the current
+  best pipeline at a strict conf>=0.75 floor (244 polygons total, ~11% more
+  training images). Detector-level mask mAP50 was flat again (0.664 vs
+  0.664), and the downstream PQ **regressed clearly**: 0.4171 -> 0.3931,
+  TP 504 -> 420. Not submitted. Most likely explanation: even a strict
+  confidence floor doesn't guarantee polygon *quality* -- pseudo-label
+  boundaries come from the refiner's own (imperfect) crop-refine output
+  rather than a human annotator, and any filament the base detector missed
+  in a pseudo-labeled image becomes an implicit hard-negative during
+  training, penalizing exactly the kind of borderline detection the model
+  needs to get better at. Self-training from this pipeline's own outputs
+  looks like it reinforces its existing blind spots rather than fixing them.
 
 ## Known leaderboard contamination
 
