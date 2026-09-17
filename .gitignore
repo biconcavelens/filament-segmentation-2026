@@ -12,6 +12,8 @@ runs/
 weights/
 scratch/
 scratch_notebooks/
+scratch_missed_filaments/
+kaggle_kernel_*/output/
 *.pt
 *.npy
 *.csv

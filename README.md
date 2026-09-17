@@ -111,6 +111,39 @@ evidence):
   training, penalizing exactly the kind of borderline detection the model
   needs to get better at. Self-training from this pipeline's own outputs
   looks like it reinforces its existing blind spots rather than fixing them.
+- Missed-filament root-cause analysis (`diag_missed_filaments.py`): the
+  ~45% of GT filaments we miss entirely skew smaller/thinner/fainter than
+  the ones we catch (median area 727 vs 1401, contrast 12.4 vs 16.5 gray
+  levels) but the effect is modest, not a sharp cutoff -- and several large,
+  visually-obvious misses don't fit that story at all. Manually inspecting
+  one (a 27957px filament, clearly visible) found YOLO's raw candidate
+  boxes had good localization (bbox-IoU 0.70-0.87 vs GT) but catastrophic
+  confidence (as low as 0.05, 7x below our 0.35 operating threshold) --
+  and feeding that exact box to the refiner produced a mask at IoU=0.75
+  vs GT. This means for at least some misses, the detector *finds* the
+  right region but its confidence head badly underrates it.
+- Rescuing those candidates via post-hoc filtering, tried three ways, all
+  failed to generalize despite the compelling single example above
+  (`sweep_refiner_gate.py`, `sweep_contrast_rescue.py`):
+  - Refiner's own mean-probability as the acceptance gate (replacing
+    YOLO's score entirely): TP 504->624 but PQ crashed 0.418->0.21. The
+    refiner is overconfident on out-of-distribution candidates too --
+    confidence barely varies between real filaments and pure background
+    junk once the YOLO floor is opened up, so it can't discriminate.
+  - Refiner confidence + a tiny YOLO floor (>=0.05) combined: same
+    failure, PQ~0.27.
+  - Local contrast (the measured, real property that *did* separate
+    missed from caught filaments in the root-cause analysis) as a rescue
+    filter for candidates YOLO scored in [0.02, 0.35): even the strictest
+    threshold tested only recovered +4 TP while still net-negative on PQ
+    (0.414 vs 0.418 baseline); looser thresholds traded away far more
+    precision than they gained in recall.
+  **Conclusion**: the missed-filament pool isn't cheaply separable from
+  noise using any single post-hoc signal tried so far. The compelling
+  single example was real but not representative -- most of the rescue
+  pool actually is junk. The likely fix, if any, is upstream: better
+  confidence calibration during YOLO training itself (e.g. loss
+  reweighting), not smarter filtering of what it already outputs.
 
 ## Known leaderboard contamination
 
