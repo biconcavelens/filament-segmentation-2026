@@ -90,6 +90,13 @@ evidence):
   direction as a closed line of investigation for this dataset/setup unless
   a genuinely different merge principle (e.g. de-duplicating overlapping
   cross-detector proposals *before* scoring, rather than after) is found.
+- Ultralytics' built-in test-time augmentation (`model.predict(...,
+  augment=True)`, flip + multi-scale, merged internally via NMS) on top of
+  the validated YOLO11m config: PQ and TP came back *bit-for-bit identical*
+  to `augment=False` (0.4171, TP=504) rather than merely similar. That's not
+  "TTA doesn't help" so much as a sign the flag had no effect at all for
+  this segmentation task/model combination in this ultralytics version --
+  inconclusive, not a real negative result about TTA's potential.
 
 ## Known leaderboard contamination
 
