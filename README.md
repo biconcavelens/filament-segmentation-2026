@@ -68,6 +68,28 @@ evidence):
   (imgsz 1536, confidence left at its already-validated 1280 setting) tied
   the real score instead of regressing it -- so the risk is specifically in
   jointly re-optimizing two axes at once, not in testing resolution itself.
+- Cross-architecture ensemble (Mask R-CNN + YOLO) with a *calibrated* merge:
+  fit an isotonic regression per detector (raw confidence -> P(true
+  positive), on the val split) so both detectors' scores land on a
+  comparable [0,1] scale, then pooled all candidates from both and painted
+  by a single shared acceptance threshold. Principled fix for the "scores
+  aren't on the same scale" problem that sank the earlier hand-tuned
+  attempts below -- but still landed at local PQ 0.358 (best threshold),
+  well short of either solo detector (~0.42-0.43). The calibration curves
+  themselves looked reasonable and TP recall was genuinely the highest yet
+  (634 vs ~505-520 for any solo detector, confirming the complementary
+  detections are real), but pooling raw candidates from both detectors
+  multiplies how often the *same* true filament gets several overlapping
+  proposals; panoptic-paint's greedy highest-score-wins logic only keeps one
+  winner per pixel region, and the leftover fragments from the losing
+  proposals show up as extra near-miss/spurious predictions that eat the
+  recall gain under PQ's symmetric FP/FN penalty. **This is now the third
+  distinct ensemble-merge strategy (hand-tuned per-detector thresholds,
+  grid-searched AGREE/UNIQUE thresholds, calibrated single threshold) to
+  land well below solo detection** -- treat the cross-architecture ensemble
+  direction as a closed line of investigation for this dataset/setup unless
+  a genuinely different merge principle (e.g. de-duplicating overlapping
+  cross-detector proposals *before* scoring, rather than after) is found.
 
 ## Known leaderboard contamination
 
