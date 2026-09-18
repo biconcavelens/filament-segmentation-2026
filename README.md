@@ -148,6 +148,23 @@ evidence):
   pool actually is junk. The likely fix, if any, is upstream: better
   confidence calibration during YOLO training itself (e.g. loss
   reweighting), not smarter filtering of what it already outputs.
+- **Fourth rescue-filter attempt, same story**: `sweep_multifeature_rescue.py`
+  combined all the weak signals above (raw score, contrast, area,
+  elongation, thickness) into a small logistic regression classifier
+  instead of a single threshold, fit on a genuinely separate pool this time
+  (candidates from 250 *train* images, not val, to avoid the fit/eval
+  circularity of the earlier isotonic-calibration attempts). Best result:
+  accept_prob>=0.9, PQ=0.4235 (+4 TP), essentially identical to the
+  contrast-only attempt's best result and still below the 0.4252 baseline.
+  **This closes the post-hoc rescue-filtering investigation for good**: four
+  different feature combinations (refiner confidence alone, refiner
+  confidence + floor, local contrast alone, and now all of the above
+  combined via a classifier) all converge to the same story -- loosen the
+  gate and precision craters, tighten it to where it's safe and you barely
+  recover anything. The rescue-zone candidate pool (YOLO score 0.02-0.33)
+  genuinely does not contain a cheaply-extractable signal separating real
+  misses from noise; the only lever that has actually worked is fixing the
+  upstream model (the cls-weight training fix, real PQ 0.37 -> 0.38).
 - **Follow-up, and this one worked**: retrained YOLO11m with `cls=1.5`
   (ultralytics' classification-loss weight, up from the default 0.5) to
   push exactly the upstream fix predicted above. Local val PQ 0.4171 ->
