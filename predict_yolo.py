@@ -24,7 +24,10 @@ from predict_refined import refine_with_tta
 D = Path("data/MAGFiLO_1.0_Kaggle_2026")
 TEST_DIR = D / "test" / "test_images"
 
-YOLO_CONF = 0.35  # swept in sweep_yolo_solo.py: local PQ 0.4095 (0.25) -> 0.4117 (0.35)
+YOLO_CONF = 0.33  # re-tuned for the cls=1.5-weighted YOLO11m checkpoint (higher
+# classification-loss weight during training, targeting the confidence-
+# miscalibration root cause found in diag_missed_filaments.py): local PQ
+# 0.4171 (uncalibrated 11m @ 0.35) -> 0.4252 (cls-weighted 11m @ 0.33)
 MIN_AREA = 20
 CHUNK_SIZE = 20
 COOLDOWN_SECONDS = 15

@@ -6,27 +6,31 @@ features) in GONG H-alpha full-disk observations, for the
 Scored by Panoptic Quality (PQ): `PQ = sum(IoU over matches) / (TP + 0.5*FP + 0.5*FN)`,
 match = IoU > 0.5.
 
-## Current best: PQ 0.37 (real leaderboard)
+## Current best: PQ 0.38 (real leaderboard)
 
 Two-stage detect-then-refine pipeline:
 
-1. **Detection**: two independently-trained Mask R-CNN (`torchvision`)
-   detectors -- one on the standard recipe, one with random-crop
-   "tile" augmentation for scale diversity -- combined via an
-   agreement-weighted candidate merge (`ensemble_diag.py`): a filament both
-   detectors agree on needs only a modest confidence bar; one only a single
-   detector found needs a much higher bar.
+1. **Detection**: YOLO11m-seg (`kaggle_kernel_train_cls/train_yolo_cls.py`),
+   trained with a raised classification-loss weight (`cls=1.5`, up from
+   ultralytics' default 0.5) to fix a diagnosed confidence-miscalibration
+   problem: `diag_missed_filaments.py` found several large, visually-obvious
+   missed filaments where YOLO's raw box was well-localized (bbox-IoU
+   0.70-0.87 vs GT) but scored as low as 0.05, 7x below the deployment
+   threshold. Inference at imgsz=1280, conf=0.33 (re-tuned for this
+   checkpoint via a cached single-axis sweep).
 2. **Refinement**: each detection is cropped from the *original* full-res
-   image (not the detector's blurry internal 28x28 mask head) and refined by
+   image (not the detector's blurry internal mask head) and refined by
    a small U-Net (`train_refiner.py`) with an auxiliary output head
    supervised by the dataset's real, human-annotated spine (centerline)
    polyline -- real geometric signal, not a synthetic approximation.
 3. **Test-time augmentation**: 4-view flip TTA with a topology-safe
    fallback (reject the flip-averaged prediction if it distorts the shape
    too much vs. the identity view).
-4. Both detectors are refit on 100% of the labeled data (not just the 90%
-   train split) after model selection was done on the held-out split --
-   standard final-refit practice.
+
+An earlier two-detector Mask R-CNN ensemble (agreement-weighted candidate
+merge, `ensemble_diag.py`) and solo YOLO11s/YOLO11m without the cls-weight
+fix all independently reached real PQ 0.37 -- see RESULTS.md for the full
+progression to 0.38.
 
 See `pq.py` for the exact local metric (matches the competition's) and
 `diag.py` / `ensemble_diag.py` for the error-decomposition diagnostics used
@@ -144,6 +148,15 @@ evidence):
   pool actually is junk. The likely fix, if any, is upstream: better
   confidence calibration during YOLO training itself (e.g. loss
   reweighting), not smarter filtering of what it already outputs.
+- **Follow-up, and this one worked**: retrained YOLO11m with `cls=1.5`
+  (ultralytics' classification-loss weight, up from the default 0.5) to
+  push exactly the upstream fix predicted above. Local val PQ 0.4171 ->
+  0.4252 (TP 504 -> 522) at a re-tuned conf=0.33, a smooth single-peaked
+  sweep. **Real score: 0.37 -> 0.38, the first genuine improvement past the
+  plateau all session.** Confirms the root-cause diagnosis was correct: the
+  bottleneck for a meaningful chunk of the missed filaments really was
+  confidence-head undertraining, not detector capacity, resolution, or
+  ensemble diversity -- all of which were tried first and all plateaued.
 
 ## Known leaderboard contamination
 
