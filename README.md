@@ -254,6 +254,30 @@ evidence):
   better. Root cause: "complete" filtering collapsed 1038 training entries
   down to 637 unique images, a ~39% cut in training volume. The lost data
   volume outweighed whatever label-quality benefit existed. Not submitted.
+- **Correction to "cross-architecture ensembling looks structurally
+  closed" above**: the fourth attempt correctly diagnosed the mechanism
+  (duplicate overlapping cross-detector proposals) but never actually
+  fixed it -- it still pooled candidates and let panoptic-paint's greedy
+  pixel-claiming handle overlaps implicitly, the same thing every prior
+  attempt did. A fifth attempt (`sweep_ensemble_true_dedup.py`) implements
+  the actual fix: explicit cross-detector NMS *before* painting -- sort
+  calibrated candidates by score, greedily accept, and discard (not
+  fragment) anything overlapping an already-accepted candidate above an
+  IoU threshold. This is the first of five ensemble strategies to beat
+  solo detection: local val PQ 0.4361 (dedup_iou=0.3, accept=0.4) vs
+  0.4252 YOLO solo / 0.4152 Mask R-CNN solo, TP 574 vs 522 -- the largest
+  local gain of the whole post-checkpoint exploration phase, and a smooth
+  plateau across nearby grid cells (0.43-0.436) rather than a knife-edge
+  spike. Submitted (`predict_ensemble_dedup.py`): **real score 0.38,
+  ties rather than beats the current best.** Kept as a documented,
+  genuinely-better-locally alternative -- the tie (not a regression) is
+  itself useful signal that the fix is real, just not yet large enough to
+  cross into a higher score bucket on this ~180-image test set. The
+  simpler solo YOLO pipeline remains the primary recommendation for the
+  final report given the tie and substantially lower complexity (one
+  detector, no calibration-fitting step, easier to document and
+  reproduce) -- see the Open-Access Policy / code-quality scoring in the
+  competition rubric.
 
 ## Known leaderboard contamination
 
