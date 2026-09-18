@@ -208,6 +208,21 @@ evidence):
   run that happens to start from a good init, not a continuation. Not
   submitted. A true state-preserving resume might still help; the
   cross-machine save_dir issue would need solving first.
+- Every experiment above targeted the *detector* stage. `sweep_refiner_spine_weight.py`
+  targets the refiner instead -- the component that determines mask
+  boundary quality once something's already detected -- by sweeping the
+  auxiliary spine-centerline loss weight (`spine_w`, default 0.3) from
+  0.15 to 0.6. Cheap to test locally (small crop-based U-Net, ~40min for
+  all 4 variants). Caveat worth flagging: the raw training val_loss isn't
+  comparable across spine_w values, since it mechanically reweights the
+  loss definition itself (a higher spine_w shifts weight toward the
+  easier-to-fit spine term, lowering the number without necessarily
+  improving mask quality) -- so all 4 checkpoints were run through the
+  actual detect+refine+PQ pipeline instead. Result: flat, PQ 0.4225-0.4259
+  across the whole range, no meaningful difference. Confirms the refiner
+  isn't the bottleneck -- consistent with the session-long finding that
+  missed detections (recall), not boundary precision of what's already
+  caught, account for nearly all the remaining PQ gap.
 
 ## Known leaderboard contamination
 
