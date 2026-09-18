@@ -194,6 +194,20 @@ evidence):
   greedy pixel-claiming can't resolve that the way a proper cross-detector
   NMS/dedup would. Cross-architecture ensembling looks structurally closed
   for this pipeline, not just under-calibrated.
+- Tried extending the winning cls=1.5 run further: its loss curve was still
+  improving at epoch 40 (val/cls_loss still falling, mAP50(M) still
+  climbing), so continued training for 30 more epochs starting from the
+  epoch-40 weights. True ultralytics `resume=True` (which preserves
+  optimizer/LR-scheduler state exactly) needs the checkpoint's own recorded
+  save_dir to exist, which breaks across a fresh Kaggle kernel filesystem --
+  so this used a fresh training call seeded from the good weights instead
+  (its own new LR schedule/warmup). Result: peaked at local val PQ=0.4170,
+  essentially flat-to-slightly-worse than the original 40-epoch run's
+  0.4252. A fresh warmup restarting from already-converged weights doesn't
+  cleanly extend the original trajectory -- it behaves like an independent
+  run that happens to start from a good init, not a continuation. Not
+  submitted. A true state-preserving resume might still help; the
+  cross-machine save_dir issue would need solving first.
 
 ## Known leaderboard contamination
 
