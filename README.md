@@ -241,6 +241,20 @@ evidence):
   missed detections (recall), not boundary precision of what's already
   caught, account for nearly all the remaining PQ gap.
 
+- Combined the cls=1.5 fix with a second, genuinely untried lever: cleaner
+  training labels. `dataset.py`'s own docstring flags the mechanism --
+  "42% of images have 2-3 annotators who disagree on *which* filaments to
+  mark, so training on all entries teaches the detector to sometimes skip
+  real filaments" -- a very plausible contributor to the same confidence-
+  miscalibration bug the cls=1.5 fix addressed. `dataset.py` already
+  supports `train_labels="complete"` (keep only the richest annotator
+  entry per training image) but it had never been tried for YOLO, or
+  combined with the cls-weight fix. Result: mAP50(M) 0.649 (vs 0.671 for
+  "all" labels), local val PQ peaked at 0.4188 (vs 0.4252) -- worse, not
+  better. Root cause: "complete" filtering collapsed 1038 training entries
+  down to 637 unique images, a ~39% cut in training volume. The lost data
+  volume outweighed whatever label-quality benefit existed. Not submitted.
+
 ## Known leaderboard contamination
 
 **Scores above ~0.5 on the public leaderboard are not legitimate models.**
