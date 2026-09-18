@@ -165,6 +165,35 @@ evidence):
   useful optimum for this hyperparameter -- overweighting classification
   loss far enough starts trading away box/segmentation quality instead of
   fixing confidence calibration for free.
+- Applied the same fix to Mask R-CNN (the *other* detector family, still at
+  real PQ 0.37): a diagnostic mirroring `diag_missed_filaments.py` found
+  the identical bug, worse in relative terms -- 231/908 GT filaments (25%)
+  had a well-localized box (bbox-IoU>0.5) but scored below the 0.80
+  deployment threshold, median score only 0.386. Retrained with the RoI
+  head's `loss_classifier` reweighted 3x (torchvision doesn't expose a
+  `cls=` kwarg like ultralytics, so this reweights the term directly in the
+  training loop) and re-swept the acceptance threshold: smooth single peak
+  at thresh=0.80, local val PQ 0.4152. Solid on its own but below the
+  cls-fixed YOLO (0.4252); training was still improving at the last epoch
+  here too, so there's likely more in this checkpoint with a longer run.
+  Not submitted solo (wouldn't beat the current best), but confirms the
+  confidence-miscalibration bug is a property of *this problem* (thin,
+  variably-faint filaments), not one specific architecture's quirk.
+- **Retried the calibrated cross-architecture ensemble** with both
+  detectors now individually confidence-fixed (previous calibrated-ensemble
+  attempt used the *old*, miscalibrated Mask R-CNN and YOLO11m). If the
+  earlier failure really was about scores not being comparable across
+  architectures, fixing calibration on both sides first should have helped.
+  It didn't: best ensemble PQ=0.3492, still well below *either* solo
+  detector (0.4252 YOLO, 0.4152 Mask R-CNN). **This is the fourth distinct
+  ensemble-merge strategy to fail**, and calibration quality clearly isn't
+  the bottleneck (both inputs were reasonably calibrated this time). The
+  real problem is more likely the one flagged after the first calibrated
+  attempt: pooling raw candidates from two architectures means the same
+  true filament gets several overlapping proposals, and panoptic-paint's
+  greedy pixel-claiming can't resolve that the way a proper cross-detector
+  NMS/dedup would. Cross-architecture ensembling looks structurally closed
+  for this pipeline, not just under-calibrated.
 
 ## Known leaderboard contamination
 

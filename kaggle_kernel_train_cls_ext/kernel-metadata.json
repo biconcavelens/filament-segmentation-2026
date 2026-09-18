@@ -1,0 +1,12 @@
+{
+  "id": "trishanthmellimi/filament-yolo11m-cls-ext-train",
+  "title": "filament-yolo11m-cls-ext-train",
+  "code_file": "train_yolo_cls_ext.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["trishanthmellimi/filament-seg-checkpoints"],
+  "competition_sources": ["filament-segmentation-2026"]
+}

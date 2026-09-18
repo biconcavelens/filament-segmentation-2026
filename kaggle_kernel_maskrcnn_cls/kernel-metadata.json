@@ -1,0 +1,12 @@
+{
+  "id": "trishanthmellimi/filament-maskrcnn-cls-train",
+  "title": "filament-maskrcnn-cls-train",
+  "code_file": "train_maskrcnn_cls.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["trishanthmellimi/filament-seg-checkpoints"],
+  "competition_sources": ["filament-segmentation-2026"]
+}
