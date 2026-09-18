@@ -157,6 +157,14 @@ evidence):
   bottleneck for a meaningful chunk of the missed filaments really was
   confidence-head undertraining, not detector capacity, resolution, or
   ensemble diversity -- all of which were tried first and all plateaued.
+- Pushed the same lever further to see if the trend continues: `cls=3.0`
+  (double the winning 1.5). It doesn't -- detector-level mask mAP50 dropped
+  to 0.647 (worse than even the *original* uncalibrated 0.664), and local
+  val PQ peaked at only 0.4104, below both cls=1.5 (0.4252) and the
+  uncalibrated baseline (0.4171). Not submitted. `cls=1.5` sits near the
+  useful optimum for this hyperparameter -- overweighting classification
+  loss far enough starts trading away box/segmentation quality instead of
+  fixing confidence calibration for free.
 
 ## Known leaderboard contamination
 

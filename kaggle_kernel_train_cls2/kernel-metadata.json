@@ -1,0 +1,11 @@
+{
+  "id": "trishanthmellimi/filament-yolo11m-cls2-train",
+  "title": "filament-yolo11m-cls2-train",
+  "code_file": "train_yolo_cls2.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "competition_sources": ["filament-segmentation-2026"]
+}
