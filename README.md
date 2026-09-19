@@ -297,6 +297,17 @@ evidence):
   the ceiling.** This is now the current-best pipeline
   (`predict_ensemble_dedup.py`), replacing the solo YOLO11m recommendation
   above it in this file.
+- Checked the one remaining untuned lever in this pipeline: the raw
+  candidate-gathering floors (`FLOOR_A`/`FLOOR_B`, originally 0.5/0.15,
+  inherited from earlier ad hoc attempts and never tuned for the
+  calibrated+dedup pipeline). Lowered to 0.3/0.05 -- nearly doubling the
+  candidate pool (1262->1588 Mask R-CNN, 1336->2351 YOLO) -- and re-swept
+  accept_thresh. Identical peak: PQ=0.4407 at the exact same accept=0.45.
+  The isotonic calibration correctly maps the extra low-confidence
+  candidates to near-zero probability, so they get filtered out at
+  accept=0.45 regardless. **Confirms this is a genuinely robust optimum,
+  not sensitive to floor choice** -- the pipeline was already seeing
+  everything worth seeing at the original floors.
 
 ## Known leaderboard contamination
 

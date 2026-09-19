@@ -33,7 +33,8 @@ from predict_refined import refine_with_tta
 MASKRCNN_CKPT = "kaggle_kernel_maskrcnn_cls/output/checkpoints/maskrcnn_cls_epoch5.pt"
 YOLO_CKPT = "kaggle_dataset_upload/yolo11m_cls_best.pt"
 REFINER_CKPT = "checkpoints/refiner_v5_best.pt"
-FLOOR_A, FLOOR_B = 0.5, 0.15
+FLOOR_A, FLOOR_B = 0.3, 0.05  # lowered from 0.5/0.15 -- untested lever, never tuned for
+# the calibrated+dedup pipeline; known genuine TPs exist at YOLO score as low as 0.05
 MIN_AREA = 20
 
 
@@ -223,10 +224,11 @@ def main():
         return (pq_num / pq_den if pq_den else 0.0), tp
 
     print("\n=== solo baselines: YOLO cls-fixed 0.4252, Mask R-CNN cls-fixed 0.4152 ===\n")
-    print("=== fine accept_thresh sweep at dedup_iou=0.05 (established plateau) ===\n")
+    print("=== lowered candidate floors (0.3/0.05, was 0.5/0.15) -- untested lever ===\n")
+    print("=== previous best (old floors): dedup_iou=0.05, accept=0.45 -> PQ=0.4407 ===\n")
     results = []
     for dedup_iou in [0.05]:
-        for accept_thresh in [0.41, 0.42, 0.43, 0.44, 0.45, 0.46, 0.47, 0.48]:
+        for accept_thresh in [0.3, 0.35, 0.4, 0.45, 0.5, 0.55]:
             pq, tp = pq_for(dedup_iou, accept_thresh)
             print(f"dedup_iou={dedup_iou} accept={accept_thresh}: PQ={pq:.4f} TP={tp}", flush=True)
             results.append((pq, dedup_iou, accept_thresh, tp))
