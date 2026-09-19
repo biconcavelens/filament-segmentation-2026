@@ -223,10 +223,10 @@ def main():
         return (pq_num / pq_den if pq_den else 0.0), tp
 
     print("\n=== solo baselines: YOLO cls-fixed 0.4252, Mask R-CNN cls-fixed 0.4152 ===\n")
-    print("=== pushing dedup_iou lower still -- trend hadn't peaked at 0.1 ===\n")
+    print("=== fine accept_thresh sweep at dedup_iou=0.05 (established plateau) ===\n")
     results = []
-    for dedup_iou in [0.01, 0.03, 0.05, 0.08, 0.1]:
-        for accept_thresh in [0.4, 0.45, 0.5]:
+    for dedup_iou in [0.05]:
+        for accept_thresh in [0.41, 0.42, 0.43, 0.44, 0.45, 0.46, 0.47, 0.48]:
             pq, tp = pq_for(dedup_iou, accept_thresh)
             print(f"dedup_iou={dedup_iou} accept={accept_thresh}: PQ={pq:.4f} TP={tp}", flush=True)
             results.append((pq, dedup_iou, accept_thresh, tp))
