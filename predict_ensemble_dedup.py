@@ -27,8 +27,8 @@ YOLO_CKPT = "kaggle_dataset_upload/yolo11m_cls_best.pt"
 REFINER_CKPT = "checkpoints/refiner_v5_best.pt"
 FLOOR_A, FLOOR_B = 0.5, 0.15
 MIN_AREA = 20
-DEDUP_IOU = 0.3
-ACCEPT_THRESH = 0.4
+DEDUP_IOU = 0.05  # refined: flat plateau 0.03-0.1 (PQ=0.4407), turns over below 0.01
+ACCEPT_THRESH = 0.45
 
 D = __import__("pathlib").Path("data/MAGFiLO_1.0_Kaggle_2026")
 TEST_DIR = D / "test" / "test_images"

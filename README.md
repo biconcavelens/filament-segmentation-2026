@@ -6,31 +6,47 @@ features) in GONG H-alpha full-disk observations, for the
 Scored by Panoptic Quality (PQ): `PQ = sum(IoU over matches) / (TP + 0.5*FP + 0.5*FN)`,
 match = IoU > 0.5.
 
-## Current best: PQ 0.38 (real leaderboard)
+## Current best: PQ 0.39 (real leaderboard)
 
-Two-stage detect-then-refine pipeline:
+Cross-architecture ensemble with calibrated confidence and explicit
+cross-detector dedup (`predict_ensemble_dedup.py`):
 
-1. **Detection**: YOLO11m-seg (`kaggle_kernel_train_cls/train_yolo_cls.py`),
-   trained with a raised classification-loss weight (`cls=1.5`, up from
-   ultralytics' default 0.5) to fix a diagnosed confidence-miscalibration
-   problem: `diag_missed_filaments.py` found several large, visually-obvious
-   missed filaments where YOLO's raw box was well-localized (bbox-IoU
-   0.70-0.87 vs GT) but scored as low as 0.05, 7x below the deployment
-   threshold. Inference at imgsz=1280, conf=0.33 (re-tuned for this
-   checkpoint via a cached single-axis sweep).
-2. **Refinement**: each detection is cropped from the *original* full-res
-   image (not the detector's blurry internal mask head) and refined by
-   a small U-Net (`train_refiner.py`) with an auxiliary output head
-   supervised by the dataset's real, human-annotated spine (centerline)
-   polyline -- real geometric signal, not a synthetic approximation.
-3. **Test-time augmentation**: 4-view flip TTA with a topology-safe
+1. **Two independently-trained detectors**, both individually confidence-
+   fixed (see "What's been tried" below for why that fix mattered):
+   - **Mask R-CNN** (`kaggle_kernel_maskrcnn_cls/train_maskrcnn_cls.py`),
+     RoI classification loss reweighted 3x during training.
+   - **YOLO11m-seg** (`kaggle_kernel_train_cls/train_yolo_cls.py`),
+     classification loss weight raised to `cls=1.5` (from ultralytics'
+     default 0.5).
+   Both fixes target the same diagnosed root cause: `diag_missed_filaments.py`
+   found large, visually-obvious missed filaments where the raw detection
+   box was well-localized (bbox-IoU 0.70-0.87 vs GT) but scored far below
+   the deployment threshold -- an undertrained confidence head, not a
+   localization failure.
+2. **Per-detector isotonic calibration**: each detector's raw confidence
+   is mapped to a comparable [0,1] "P(true positive)" scale, fit on the
+   held-out val split.
+3. **True cross-detector NMS dedup**: pooled candidates from both
+   detectors are sorted by calibrated score; anything overlapping an
+   already-accepted candidate above IoU 0.05 is discarded wholesale
+   (not fragmented) -- this, not calibration, was the actual fix for why
+   four earlier ensemble attempts failed (see "What's been tried" below).
+4. **Refinement**: each surviving detection is cropped from the *original*
+   full-res image (not the detector's blurry internal mask head) and
+   refined by a small U-Net (`train_refiner.py`) with an auxiliary output
+   head supervised by the dataset's real, human-annotated spine
+   (centerline) polyline.
+5. **Test-time augmentation**: 4-view flip TTA with a topology-safe
    fallback (reject the flip-averaged prediction if it distorts the shape
    too much vs. the identity view).
 
-An earlier two-detector Mask R-CNN ensemble (agreement-weighted candidate
-merge, `ensemble_diag.py`) and solo YOLO11s/YOLO11m without the cls-weight
-fix all independently reached real PQ 0.37 -- see RESULTS.md for the full
-progression to 0.38.
+The simpler solo-detector pipelines (YOLO11m cls=1.5 alone, or the
+original two-detector Mask R-CNN agreement-weighted ensemble) all
+independently reached real PQ 0.37-0.38 -- see RESULTS.md for the full
+progression from 0.37 to 0.39. The solo YOLO11m pipeline
+(`predict_yolo.py`) remains documented as a much simpler fallback with
+only a 1-leaderboard-point cost, useful if reproducibility/simplicity is
+weighted heavily.
 
 See `pq.py` for the exact local metric (matches the competition's) and
 `diag.py` / `ensemble_diag.py` for the error-decomposition diagnostics used
@@ -268,16 +284,19 @@ evidence):
   0.4252 YOLO solo / 0.4152 Mask R-CNN solo, TP 574 vs 522 -- the largest
   local gain of the whole post-checkpoint exploration phase, and a smooth
   plateau across nearby grid cells (0.43-0.436) rather than a knife-edge
-  spike. Submitted (`predict_ensemble_dedup.py`): **real score 0.38,
-  ties rather than beats the current best.** Kept as a documented,
-  genuinely-better-locally alternative -- the tie (not a regression) is
-  itself useful signal that the fix is real, just not yet large enough to
-  cross into a higher score bucket on this ~180-image test set. The
-  simpler solo YOLO pipeline remains the primary recommendation for the
-  final report given the tie and substantially lower complexity (one
-  detector, no calibration-fitting step, easier to document and
-  reproduce) -- see the Open-Access Policy / code-quality scoring in the
-  competition rubric.
+  spike. First submission: real score 0.38, tied rather than beat the
+  current best -- but a tie (not a regression) on the *largest* local gain
+  yet was a strong signal the fix was real, just not large enough yet.
+- **Refined the grid and it paid off**: `dedup_iou` was still monotonically
+  improving PQ as it decreased at every accept level tested, so pushed it
+  lower. The trend held flat across a wide plateau (0.03-0.1, all PQ=0.4407)
+  and only turned over below 0.01 (too aggressive -- starts merging
+  genuinely-separate nearby filaments, not just deduping true overlaps).
+  True peak: dedup_iou=0.05, accept=0.45. Local val PQ 0.4361 -> 0.4407,
+  TP 574 -> 553. **Real score: 0.38 -> 0.39, a genuine improvement past
+  the ceiling.** This is now the current-best pipeline
+  (`predict_ensemble_dedup.py`), replacing the solo YOLO11m recommendation
+  above it in this file.
 
 ## Known leaderboard contamination
 
