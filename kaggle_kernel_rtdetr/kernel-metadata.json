@@ -1,0 +1,11 @@
+{
+  "id": "trishanthmellimi/filament-rtdetr-train",
+  "title": "filament-rtdetr-train",
+  "code_file": "train_rtdetr.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "competition_sources": ["filament-segmentation-2026"]
+}
