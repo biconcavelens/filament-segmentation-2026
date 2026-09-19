@@ -308,6 +308,27 @@ evidence):
   accept=0.45 regardless. **Confirms this is a genuinely robust optimum,
   not sensitive to floor choice** -- the pipeline was already seeing
   everything worth seeing at the original floors.
+- Tried to push the ensemble further by fixing what looked like an
+  under-trained Mask R-CNN: the original cls-fix run (`cls=3.0`) only
+  trained 6 epochs (vs YOLO's 40) and was still visibly improving at the
+  last one, and `cls=3.0` was never actually compared against other
+  values -- YOLO's own sweep found its own cls=3.0 overshot and 1.5 was
+  better, but that comparison was never redone for Mask R-CNN. Ran two
+  20-epoch retrains to separate the two questions: `cls=1.5`/20ep and
+  `cls=3.0`/20ep. Both auto-evals were cut short at thresh=0.7 (the same
+  mistake as the first run), still visibly rising, so extended the
+  threshold sweep locally on each best candidate before concluding
+  anything. Neither helped: `cls=3.0`/20ep peaks at PQ=0.4124 (thresh=0.85),
+  `cls=1.5`/20ep peaks at PQ=0.4035 (thresh=0.85) -- both *below* the
+  original `cls=3.0`/6-epoch checkpoint's 0.4152. Turns out 6 epochs
+  wasn't under-trained after all (this dataset overfits early, exactly as
+  the original training notes warned); `cls=3.0` genuinely suits Mask
+  R-CNN better than `cls=1.5` (unlike YOLO, where 1.5 beat 3.0 -- the two
+  architectures' loss scales/dynamics differ enough that the same
+  cls-weight lesson doesn't transfer directly). **The ensemble was already
+  using the best available Mask R-CNN checkpoint; this specific avenue
+  toward 0.40 is closed.** Not submitted (neither beats the deployed
+  epoch5 checkpoint).
 
 ## Known leaderboard contamination
 
