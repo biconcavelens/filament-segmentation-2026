@@ -329,6 +329,28 @@ evidence):
   using the best available Mask R-CNN checkpoint; this specific avenue
   toward 0.40 is closed.** Not submitted (neither beats the deployed
   epoch5 checkpoint).
+- Tried a genuinely different third detector instead: RT-DETR
+  (transformer-based, query/Hungarian-matching detection -- a real
+  departure from Mask R-CNN's two-stage RPN+RoI-head and YOLO's anchor-free
+  single-stage CNN). RT-DETR in ultralytics is detection-only, which is
+  fine -- the refiner already works from boxes regardless of whether the
+  upstream detector natively predicts masks, so it slots into the same
+  box-in pipeline as the other two (`kaggle_kernel_rtdetr/train_rtdetr.py`,
+  bbox-format dataset derived from the same polygon extents). First run at
+  ultralytics' own defaults (no cls-weight tuning, no epoch/threshold
+  lessons applied yet): solo PQ ~0.40 (conf~0.5), weaker than both existing
+  detectors but in the same ballpark as Mask R-CNN's first untuned attempt.
+  Added as a third ensemble member (`sweep_ensemble_3way.py`, same
+  calibrate + true-dedup pipeline, now with 3 isotonic calibrators): best
+  3-way PQ=0.4383, *below* the 2-way ensemble's 0.4407. RT-DETR's untuned
+  candidate pool (4459 candidates, only 996 TP -- a lower hit rate than
+  either existing detector) adds more noise than complementary recall at
+  these settings. Not submitted. Inconclusive rather than a hard "no":
+  RT-DETR was tested completely raw, without the cls-weight/threshold
+  tuning journey that took the other two detectors from their own first
+  untuned attempts to real ensemble contributors -- that full tuning pass
+  hasn't been done here yet, and would be the natural next step if pursuing
+  this further.
 
 ## Known leaderboard contamination
 
