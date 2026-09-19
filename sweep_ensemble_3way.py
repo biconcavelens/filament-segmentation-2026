@@ -30,9 +30,9 @@ from predict_refined import refine_with_tta
 
 MASKRCNN_CKPT = "kaggle_kernel_maskrcnn_cls/output/checkpoints/maskrcnn_cls_epoch5.pt"
 YOLO_CKPT = "kaggle_dataset_upload/yolo11m_cls_best.pt"
-RTDETR_CKPT = "kaggle_kernel_rtdetr/output/rtdetr_best.pt"
+RTDETR_CKPT = "kaggle_kernel_rtdetr_cls/output/rtdetr_cls_best.pt"
 REFINER_CKPT = "checkpoints/refiner_v5_best.pt"
-FLOOR_A, FLOOR_B, FLOOR_C = 0.3, 0.05, 0.1  # A=Mask R-CNN, B=YOLO, C=RT-DETR
+FLOOR_A, FLOOR_B, FLOOR_C = 0.3, 0.05, 0.05  # A=Mask R-CNN, B=YOLO, C=RT-DETR
 MIN_AREA = 20
 
 
@@ -249,11 +249,11 @@ def main():
             tp += m_tp
         return (pq_num / pq_den if pq_den else 0.0), tp
 
-    print("\n=== solo: YOLO 0.4252, Mask R-CNN 0.4152, RT-DETR ~0.40 (all untuned RT-DETR) ===")
+    print("\n=== solo: YOLO 0.4252, Mask R-CNN 0.4152, RT-DETR(cls=2.0/60ep) 0.4296 ===")
     print("=== 2-way ensemble (A+B) best: dedup_iou=0.05, accept=0.45 -> PQ=0.4407 ===\n")
     results = []
-    for dedup_iou in [0.05, 0.1, 0.15]:
-        for accept_thresh in [0.3, 0.35, 0.4, 0.45, 0.5]:
+    for dedup_iou in [0.03, 0.05, 0.08, 0.1, 0.15]:
+        for accept_thresh in [0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6]:
             pq, tp = pq_for(dedup_iou, accept_thresh)
             print(f"dedup_iou={dedup_iou} accept={accept_thresh}: PQ={pq:.4f} TP={tp}", flush=True)
             results.append((pq, dedup_iou, accept_thresh, tp))
