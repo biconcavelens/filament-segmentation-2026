@@ -352,6 +352,76 @@ evidence):
   hasn't been done here yet, and would be the natural next step if pursuing
   this further.
 
+## Extended exploration (still real PQ 0.39, extensively re-confirmed)
+
+A long follow-up session tried five more genuinely different levers after
+reaching 0.39, targeting whether the ceiling could be pushed to 0.40+.
+None beat 0.39; several tied it, one improved locally without transferring,
+and two were cleanly falsified. Full numbers in `RESULTS.md`; summary:
+
+- **RT-DETR confidence-calibration fix**: diagnosed the same undertrained-
+  confidence-head bug found in YOLO11/Mask R-CNN, far more extreme (58% of
+  well-localized boxes scored below 0.5, median 0.031). Retrained with
+  `cls=2.0`/60 epochs: fixed (median score 0.031 -> 0.658), solo PQ became
+  the strongest of the three detectors (0.4296). As a 3rd ensemble member:
+  local PQ 0.4407 -> 0.4418 (genuine, flat plateau) but **real score ties
+  at 0.39** -- the local delta was too small to move the leaderboard.
+- **Multi-scale YOLO TTA**: pooled detections from imgsz=1280 and native
+  2048 resolution. Local PQ 0.4252 -> 0.4451 solo, the single largest local
+  gain of the session -- **real score 0.38, ties the solo ceiling, zero
+  movement** despite the largest local jump yet. Folded into a 4-way
+  ensemble (Mask R-CNN + YOLO@1280 + YOLO@2048 + RT-DETR): local PQ 0.4465,
+  best local number of the session -- **real score 0.38, a genuine
+  regression** from 0.39, the clearest evidence of overfitting the 116-image
+  val split from too many independently-calibrated sources.
+- **YOLO26** (Ultralytics, Jan 2026, drop-in via the same API): native
+  STAL/ProgLoss innovations shift raw calibration ~10x (median 0.031 ->
+  0.355) but don't fully fix it. Three training runs (`cls` at 0.5 default,
+  1.5, 0.3) converged on "default is the local optimum" -- the only
+  detector this session where the out-of-the-box default beat every
+  tuned alternative. As a 3rd ensemble member: exact tie with the 2-way
+  baseline, zero value added (too architecturally similar to YOLO11 to add
+  diversity). Conclusively retired.
+- **YOLO11 + RT-DETR without Mask R-CNN**: an untested pairing -- every
+  RT-DETR test before this *added* it on top of Mask R-CNN + YOLO11,
+  never replaced the weakest solo detector. Local PQ 0.4407 -> 0.4440,
+  beating every combination except the (overfit) 4-way, with fewer free
+  parameters (2 calibrators, not 3-4) -- the simplest config to beat 2-way.
+  **Real score ties at 0.39** again. Kept as `predict_ensemble_yolo_rtdetr.py`,
+  a genuinely simpler alternative at the same real score.
+- **Refiner-side experiments** (mask precision, not detector recall):
+  clDice (a topology-preserving loss for thin structures, added alongside
+  the validated spine-supervision, not replacing it) actually *regressed*
+  PQ 0.4252 -> 0.4192 with the detector held fixed. Confirms, a second way,
+  that refiner quality isn't the bottleneck.
+- **VAE/autoencoder anomaly detection** (catch faint filaments via
+  reconstruction error instead of a detector's confidence head): tested
+  the core hypothesis cheaply (~15 min) before building a full pipeline.
+  AUC=0.44, *below* the no-signal baseline -- filaments are smooth,
+  large-scale features that a small autoencoder reconstructs *more* easily
+  than fine-grained background texture, the opposite of what anomaly
+  detection needs. Decisively falsified.
+
+**Takeaway**: every genuine local improvement this session past 0.4407
+has either tied the real leaderboard (three separate times, different
+mechanisms) or regressed it (the 4-way ensemble). This is a strong signal
+that 0.39 is a real, repeatedly-confirmed ceiling for the detect-then-
+refine ensemble architecture family on this dataset -- not for lack of
+trying different mechanisms within it. Remaining candidate directions,
+none cheaply testable and all requiring real engineering effort with
+uncertain payoff (deliberately not attempted without explicit buy-in given
+their cost):
+- A proposal-free, embedding/flow-field based instance segmentation
+  method (Cellpose-style) -- a genuinely different paradigm for
+  many-thin-touching-objects problems, but a from-scratch build (loss
+  function, training-target generation from polygons, custom
+  post-processing), not a config change.
+- Swapping Mask R-CNN's ResNet-50 backbone for EfficientNet-B0 via
+  torchvision's `BackboneWithFPN` -- technically feasible, but loses
+  COCO-pretrained detection weights (only ImageNet backbone pretraining
+  available) and EfficientNet-B0 is actually a *smaller* backbone
+  (5.3M vs 25.6M params) -- real risk of being a net downgrade.
+
 ## Known leaderboard contamination
 
 **Scores above ~0.5 on the public leaderboard are not legitimate models.**
