@@ -156,7 +156,7 @@ def main():
     fps = np.cumsum(1 - sorted_labels)
     tpr = tps / n_pos
     fpr = fps / n_neg
-    auc = np.trapz(tpr, fpr)
+    auc = np.trapezoid(tpr, fpr) if hasattr(np, "trapezoid") else np.trapz(tpr, fpr)
     print(f"AUC (reconstruction error as filament-vs-background classifier): {auc:.4f}")
     print("(0.5 = no signal, 1.0 = perfect separation)")
 
