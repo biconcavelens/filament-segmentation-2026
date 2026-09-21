@@ -156,6 +156,24 @@ class DiceBCEClDiceLoss(nn.Module):
         return self.bce_w * bce + self.dice_w * dice + self.cldice_w * cldice
 
 
+class MaskSpineClDiceLoss(nn.Module):
+    """MaskSpineLoss (v5, the deployed best) with clDice added to the mask
+    term instead of replacing spine supervision -- tests clDice as an
+    addition on top of the validated recipe, not instead of it."""
+
+    def __init__(self, spine_w=0.3):
+        super().__init__()
+        self.mask_loss = DiceBCEClDiceLoss()  # bce_w=0.4, dice_w=0.4, cldice_w=0.2
+        self.spine_bce = nn.BCEWithLogitsLoss()
+        self.spine_w = spine_w
+
+    def forward(self, logits, targets):
+        mask_logits, spine_logits = logits[:, 0:1], logits[:, 1:2]
+        mask_t, spine_t = targets[:, 0:1], targets[:, 1:2]
+        return (1 - self.spine_w) * self.mask_loss(mask_logits, mask_t) + \
+            self.spine_w * self.spine_bce(spine_logits, spine_t)
+
+
 def ensure_crop_cache():
     train_entries, val_entries, per_image = train_val_split(val_frac=0.1, seed=0)
     train_img = CACHE_DIR / "train_images.npy"
@@ -217,7 +235,9 @@ def main():
     args = p.parse_args()
     in_ch = 2 if args.hint else 1
     out_ch = 2 if args.spine else 1
-    if args.spine:
+    if args.spine and args.cldice:
+        prefix = "refiner_v6_full" if args.full_data else "refiner_v6"
+    elif args.spine:
         prefix = "refiner_v5_full" if args.full_data else "refiner_v5"
     elif args.cldice:
         prefix = "refiner_v4_hint" if args.hint else "refiner_v4"
@@ -247,7 +267,9 @@ def main():
                   if val_ds else [])
 
     model = RefinerUNet(in_channels=in_ch, out_channels=out_ch).to(device)
-    if args.spine:
+    if args.spine and args.cldice:
+        criterion = MaskSpineClDiceLoss()
+    elif args.spine:
         criterion = MaskSpineLoss()
     elif args.cldice:
         criterion = DiceBCEClDiceLoss()
