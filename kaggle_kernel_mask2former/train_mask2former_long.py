@@ -191,7 +191,10 @@ def main():
     print("device:", device, "EPOCHS:", EPOCHS, flush=True)
 
     processor = Mask2FormerImageProcessor.from_pretrained(
-        CHECKPOINT_NAME, size={"shortest_edge": INPUT_SIZE, "longest_edge": INPUT_SIZE},
+        # newer transformers versions require longest_edge strictly > shortest_edge
+        # (the original local run predates this validation); +32 keeps Swin's
+        # stride-32 divisibility while satisfying the check for our square inputs
+        CHECKPOINT_NAME, size={"shortest_edge": INPUT_SIZE, "longest_edge": INPUT_SIZE + 32},
         do_reduce_labels=False,
     )
     train_entries, val_entries, per_image = train_val_split(val_frac=0.1, seed=0)
