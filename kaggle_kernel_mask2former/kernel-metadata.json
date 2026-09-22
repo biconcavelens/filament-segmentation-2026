@@ -1,0 +1,11 @@
+{
+  "id": "trishanthmellimi/filament-mask2former-long-train",
+  "title": "filament-mask2former-long-train",
+  "code_file": "train_mask2former_long.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "competition_sources": ["filament-segmentation-2026"]
+}
