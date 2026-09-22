@@ -45,6 +45,8 @@
 
 | (not submitted) | Trained YOLO11m (cls=1.5) on CLAHE-preprocessed images (clipLimit=4.0, tileGridSize=8x8), following up the strong isolated signal (2-5x measured contrast amplification on real GT filaments, 100% positive). Result: solo PQ peaked at 0.4121 (thresh=0.35, TP=500) -- a **regression** from the non-CLAHE baseline's 0.4252, despite the underlying contrast measurement being genuinely positive. Likely explanation: CLAHE amplifies contrast uniformly, including JPEG-compression artifacts and background noise, not just real filament signal -- the isolated test only checked known-real filaments' contrast, not whether background clutter/noise also got amplified enough to offset the benefit. Not submitted |
 
+| (not submitted) | Follow-up with a milder CLAHE setting (clipLimit=2.0, down from 4.0's ~2x amplification still applied): solo PQ 0.4193 (thresh=0.3, TP=515) -- better than clip=4.0's 0.4121, but still below the non-CLAHE baseline's 0.4252. The trend across both data points is monotonic (less CLAHE -> closer to baseline), confirming CLAHE preprocessing provides no net detection benefit at any strength tested, despite genuinely amplifying measured contrast on real filaments. Closing the CLAHE line -- two consistent negative results is enough signal without further clip values, since the direction is already clear |
+
 See `README.md` for the architecture writeup and the full table of rejected
 approaches with local numbers, and individual commit messages for the
 reasoning behind each result.

@@ -401,6 +401,28 @@ and two were cleanly falsified. Full numbers in `RESULTS.md`; summary:
   large-scale features that a small autoencoder reconstructs *more* easily
   than fine-grained background texture, the opposite of what anomaly
   detection needs. Decisively falsified.
+- **FITS originals vs. the competition's 8-bit JPEGs**: confirmed real,
+  substantial extra precision exists (14-bit FITS from NSO's public
+  archive vs 8-bit JPEG, legitimate External Data under Kaggle's rules)
+  and is pixel-aligned to the same grid -- but recovering usable filament
+  contrast from it requires reproducing NSO's own "Fourier Transform
+  digital filtering" enhancement step, and 8 different flat-fielding
+  attempts (divisive/subtractive, multiple scales) all failed to show
+  positive filament contrast, most likely because real observatory flat-
+  fielding needs dedicated instrument calibration frames we don't have
+  access to, not just image processing on the science frame itself.
+- **CLAHE** (contrast-limited adaptive histogram equalization) on the
+  existing JPEGs: an isolated test showed a striking positive signal (2-5x
+  measured contrast amplification on real GT filaments, 100% positive at
+  every setting), the strongest of any preprocessing tried -- but training
+  a detector on CLAHE-preprocessed images regressed PQ at every clip
+  strength tested (clip=4.0: 0.4252->0.4121; clip=2.0: ->0.4193, trend
+  monotonic toward the baseline as CLAHE strength decreases). Likely
+  explanation: CLAHE amplifies noise/JPEG-compression artifacts uniformly
+  along with real signal; the isolated contrast test only checked known
+  filaments, not background clutter. A reminder that a preprocessing
+  step's effect on an isolated metric doesn't guarantee it helps a trained
+  model -- the only way to know is training and measuring end-to-end.
 
 **Takeaway**: every genuine local improvement this session past 0.4407
 has either tied the real leaderboard (three separate times, different
