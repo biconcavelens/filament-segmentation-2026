@@ -111,6 +111,29 @@ def main():
 
         ckpt = CKPT_DIR / f"mask2former_epoch{epoch}.pt"
         torch.save({"model": model.state_dict(), "epoch": epoch, "val_loss": val_loss}, ckpt)
+
+        # self-check: a fresh model built in-process must be able to reload
+        # this checkpoint with only the expected (class_predictor/criterion)
+        # keys reinitialized. Catches transformers-version drift immediately
+        # instead of discovering it hours later when it's too late to matter --
+        # a prior run silently trained for 6+ hours against a checkpoint that
+        # could never be reloaded in a fresh process, due to a mid-session
+        # transformers upgrade changing Mask2Former's internal key names.
+        _check_state = torch.load(ckpt, map_location=device)
+        _fresh = build_model(device)
+        _missing, _unexpected = _fresh.load_state_dict(_check_state["model"], strict=False)
+        _expected_reinit = {"class_predictor.weight", "class_predictor.bias", "criterion.empty_weight"}
+        _bad_missing = [k for k in _missing if k not in _expected_reinit]
+        if _bad_missing or _unexpected:
+            raise RuntimeError(
+                f"checkpoint self-check FAILED at epoch {epoch}: "
+                f"{len(_bad_missing)} unexpected-missing keys, {len(_unexpected)} unexpected keys. "
+                f"transformers version drifted mid-run -- stopping now rather than "
+                f"wasting further training time on an unloadable checkpoint."
+            )
+        del _check_state, _fresh
+        torch.cuda.empty_cache()
+
         if val_loss < best_val:
             best_val = val_loss
             torch.save({"model": model.state_dict(), "epoch": epoch, "val_loss": val_loss},
