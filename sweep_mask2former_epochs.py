@@ -8,6 +8,7 @@ tracked PQ well this session, this checks a wider net before trusting the
 auto-selected "best" checkpoint (lowest val_loss, epoch 16 here).
 """
 import time
+from types import SimpleNamespace
 
 import numpy as np
 import torch
@@ -33,13 +34,21 @@ def cache_outputs(model, processor, device, val_entries, per_image):
         pil_img = Image.open(IMG_DIR / e["file_name"]).convert("RGB")
         inputs = processor(pil_img, return_tensors="pt").to(device)
         out = model(**inputs)
+        # only keep what post_process_instance_segmentation actually reads --
+        # the full ModelOutput also carries auxiliary per-decoder-layer
+        # logits (~9x the memory, used only for training loss), which OOMs
+        # a 16GB GPU once 116 images' worth are cached simultaneously
+        trimmed = SimpleNamespace(
+            class_queries_logits=out.class_queries_logits,
+            masks_queries_logits=out.masks_queries_logits,
+        )
 
         gt_rles = []
         for a in per_image.get(e["id"], []):
             rles = mu.frPyObjects(a["segmentation"], H, W)
             gt_rles.append(to_rle(mu.decode(mu.merge(rles))))
 
-        cache.append((out, gt_rles))
+        cache.append((trimmed, gt_rles))
         if i % COOLDOWN_EVERY == 0:
             print(f"  cached {i}/{len(val_entries)}", flush=True)
             torch.cuda.empty_cache()

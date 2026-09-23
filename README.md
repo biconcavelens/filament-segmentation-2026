@@ -62,7 +62,8 @@ for the record so they aren't retried blindly:
 | Classical CV (threshold + connected components) | -- | 0.01 | |
 | Mask R-CNN, single pass, no refiner | -- | 0.27 | |
 | Plain U-Net (semantic) + connected components | 0.408 | 0.32 | can't split touching instances |
-| Mask2Former (Swin-Tiny) | 0.373 | 0.28 | insufficient fine-tune budget on ~1k images |
+| Mask2Former (Swin-Tiny), 10 epochs | 0.373 (narrow sweep, 30 imgs) | 0.28 | insufficient fine-tune budget on ~1k images |
+| Mask2Former (Swin-Tiny), 20 epochs | 0.3448 (full sweep, 116 imgs, all 10 saved checkpoints x 12 thresholds) | -- (not submitted) | budget wasn't the ceiling after all -- retrained longer, evaluated thoroughly on cloud GPU, still caps well below the detect-then-refine ensemble; query-based mask prediction avoids the box-confidence-miscalibration bug but doesn't out-segment it |
 | SAM (ViT-B decoder fine-tune, box-prompted) | 0.316 | -- | bottlenecked by the *same* detector recall problem |
 | SAM2 (zero-shot automatic mask generation) | ~0.08-0.13 | 0.08 | genuinely promising per-point (0.717 IoU zero-shot!) but no good box/point source without a detector |
 | Distance-transform + watershed (proposal-free) | 0.236 | 0.20 | confirmed the "detector recall" theory (total-miss *did* improve) but the watershed split and semantic head aren't good enough yet |
