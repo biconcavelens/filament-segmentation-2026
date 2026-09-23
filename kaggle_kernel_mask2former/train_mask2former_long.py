@@ -2,11 +2,22 @@
 budget than the original local attempt (real PQ 0.28) -- that attempt used
 only 10 epochs at batch_size=1, explicitly diagnosed as "insufficient
 fine-tune budget on ~1k images" in README.md's rejected-approaches table.
-Every other architecture this session needed 40 epochs to converge
-properly (YOLO, RT-DETR, YOLO26 all use 40); Mask2Former never got that
-chance. Everything else identical to the original recipe (frozen Swin
-encoder, batch_size=1, lr=1e-4, single-class) so epoch count is the only
-new variable.
+
+First retry used EPOCHS=40 (matching every other detector this session)
+but ~1165s/epoch meant that didn't fit a single Kaggle GPU session --
+cancelled at epoch 36/40 (~12h), and critically, a CANCELLED (not
+COMPLETE) kernel does not preserve /kaggle/working checkpoint files via
+`kaggle kernels output`, losing that entire run's compute. The recovered
+log was still informative though: train_loss kept dropping steadily
+through epoch 36 (25.3 -> 14.2), but val_loss plateaued by epoch ~17
+(20.88) and was flat/noisy after -- the useful training window looks like
+~20 epochs, with more mostly overfitting. EPOCHS=20 here, comfortably
+within a session's time budget so the run actually completes and produces
+a downloadable checkpoint this time.
+
+Everything else identical to the original recipe (frozen Swin encoder,
+batch_size=1, lr=1e-4, single-class) so epoch count is the only new
+variable.
 
 Architecturally, Mask2Former is a genuine departure from every detector
 tried this session (Mask R-CNN, YOLO, RT-DETR, YOLO26): no box-proposal
@@ -42,7 +53,7 @@ CKPT_OUT.mkdir(parents=True, exist_ok=True)
 H, W = 2048, 2048
 INPUT_SIZE = 1024
 CHECKPOINT_NAME = "facebook/mask2former-swin-tiny-coco-instance"
-EPOCHS = 40
+EPOCHS = 20
 LR = 1e-4
 COOLDOWN_EVERY = 200
 COOLDOWN_SECONDS = 10
@@ -171,6 +182,14 @@ def train_with_resume(model, train_loader, val_loader, device, max_retries=6):
             payload = {"model": model.state_dict(), "epoch": epoch, "val_loss": val_loss}
             torch.save(payload, CKPT_OUT / f"mask2former_long_epoch{epoch}.pt")
             torch.save(payload, last_ckpt)
+            # ALSO mirror the current-best-val_loss checkpoint to the working
+            # dir root every epoch (not just at the end) -- a cancelled
+            # (not completed) kernel previously lost 12h of compute because
+            # nothing was copied out until after the full loop finished
+            nonlocal_best = getattr(train_with_resume, "_best_val", float("inf"))
+            if val_loss < nonlocal_best:
+                train_with_resume._best_val = val_loss
+                torch.save(payload, Path("/kaggle/working/mask2former_long_best_sofar.pt"))
             # keep storage/download size bounded -- Swin-Tiny checkpoints are
             # large enough that 40 of them risks the slow/unreliable large-
             # output downloads seen with other kernels this session
