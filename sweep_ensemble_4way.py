@@ -187,9 +187,11 @@ def build_cache(test=False, sources=ALL_SOURCES):
                           for j in range(len(scoresA))
                           if scoresA[j] >= FLOOR_A and (masksA[j, 0] > 0.5).sum() > 0]
 
-            raw = {"A": candsA_raw,
-                   "B1280": _yolo_style_candidates(yolo, img_path, 1280, FLOOR_B1280),
-                   "B2048": _yolo_style_candidates(yolo, img_path, 2048, FLOOR_B2048)}
+            raw = {"A": candsA_raw}
+            if "B1280" in sources:
+                raw["B1280"] = _yolo_style_candidates(yolo, img_path, 1280, FLOOR_B1280)
+            if "B2048" in sources:
+                raw["B2048"] = _yolo_style_candidates(yolo, img_path, 2048, FLOOR_B2048)
             if rtdetr is not None:
                 raw["C"] = _yolo_style_candidates(rtdetr, img_path, 1280, FLOOR_C)
 
@@ -257,17 +259,19 @@ def calibrate(per_image_cache, sources, crossfit):
 
 
 def main():
-    global REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH
+    global REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH, MASKRCNN_CKPT
     p = argparse.ArgumentParser()
     p.add_argument("--from-cache", action="store_true")
     p.add_argument("--sources", nargs="+", default=ALL_SOURCES, choices=ALL_SOURCES)
     p.add_argument("--crossfit", action="store_true")
     p.add_argument("--build-test-cache", action="store_true")
     p.add_argument("--refiner", default=REFINER_CKPT)
+    p.add_argument("--maskrcnn", default=MASKRCNN_CKPT)
     p.add_argument("--cache", default=CACHE_PATH, help="val candidate cache path")
     p.add_argument("--test-cache", default=TEST_CACHE_PATH)
     args = p.parse_args()
     REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH = args.refiner, args.cache, args.test_cache
+    MASKRCNN_CKPT = args.maskrcnn
 
     if args.build_test_cache:
         build_cache(test=True, sources=args.sources)

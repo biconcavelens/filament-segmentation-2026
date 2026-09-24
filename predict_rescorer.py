@@ -32,11 +32,13 @@ def main():
     p.add_argument("--contrast", action="store_true")
     p.add_argument("--isotonic", action="store_true", help="per-source isotonic scores instead of the GBM")
     p.add_argument("--out", required=True)
+    p.add_argument("--cache", default=CACHE_PATH, help="val candidate cache (fits the scorer)")
+    p.add_argument("--test-cache", default=TEST_CACHE_PATH)
     args = p.parse_args()
 
-    with open(CACHE_PATH, "rb") as f:
+    with open(args.cache, "rb") as f:
         val = pickle.load(f)
-    with open(TEST_CACHE_PATH, "rb") as f:
+    with open(args.test_cache, "rb") as f:
         test = pickle.load(f)
     assert all(s in test[0][0] for s in args.sources), f"test cache lacks one of {args.sources}"
 

@@ -55,7 +55,10 @@ def build_model_v3(num_classes=2):
 
 
 def build_from_checkpoint(state: dict, num_classes=2):
-    return build_model_v3(num_classes) if state.get("arch") == "v3" else build_model(num_classes)
+    model = build_model_v3(num_classes) if state.get("arch") == "v3" else build_model(num_classes)
+    if "min_size" in state:  # trained at a non-default input resolution (train_maskrcnn_hires.py)
+        model.transform.min_size, model.transform.max_size = (state["min_size"],), state["max_size"]
+    return model
 
 
 @torch.no_grad()
