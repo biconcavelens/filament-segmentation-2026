@@ -189,22 +189,27 @@ SPINE_CACHE_DIR = Path("spine_crop_cache")
 SPINE_CACHE_DIR_FULL = Path("spine_crop_cache_full")
 
 
-def ensure_spine_crop_cache(full_data: bool = False):
+def ensure_spine_crop_cache(full_data: bool = False, n_trunc: int = 0, hint: bool = False):
+    """Returns (train_img, train_mask, train_spine, train_hint,
+    val_img, val_mask, val_spine, val_hint); hint paths are None unless hint."""
     from crop_dataset import build_spine_crop_cache
     cache_dir = SPINE_CACHE_DIR_FULL if full_data else SPINE_CACHE_DIR
+    if n_trunc:
+        cache_dir = Path(f"{cache_dir}_trunc{n_trunc}" + ("_hint" if hint else ""))
     val_frac = 0 if full_data else 0.1
     train_entries, val_entries, per_image = train_val_split(val_frac=val_frac, seed=0)
     train_img = cache_dir / "train_images.npy"
     if not train_img.exists():
-        print("building spine crop cache (one-time)...")
-        build_spine_crop_cache(train_entries, per_image, cache_dir, "train")
+        print("building spine crop cache (one-time)...", flush=True)
+        build_spine_crop_cache(train_entries, per_image, cache_dir, "train", n_trunc=n_trunc, with_hint=hint)
         if val_entries:
-            build_spine_crop_cache(val_entries, per_image, cache_dir, "val")
-    if full_data:
-        return (cache_dir / "train_images.npy", cache_dir / "train_masks.npy",
-                cache_dir / "train_spines.npy", None, None, None)
-    return tuple(cache_dir / f"{split}_{kind}.npy"
-                 for split in ("train", "val") for kind in ("images", "masks", "spines"))
+            build_spine_crop_cache(val_entries, per_image, cache_dir, "val", n_trunc=n_trunc, with_hint=hint)
+    kinds = ("images", "masks", "spines", "hints")
+    out = []
+    for split in ("train", "val"):
+        present = split == "train" or not full_data
+        out += [cache_dir / f"{split}_{k}.npy" if present and (k != "hints" or hint) else None for k in kinds]
+    return tuple(out)
 
 
 @torch.no_grad()
@@ -232,11 +237,18 @@ def main():
     p.add_argument("--full-data", action="store_true",
                     help="final refit on all crops (no held-out val); only valid with --spine, "
                          "for the already-validated v5 recipe")
+    p.add_argument("--truncated", type=int, default=0,
+                    help="with --spine: add N truncated-proposal-window crops per instance (refiner v7)")
     args = p.parse_args()
+    assert not args.truncated or args.spine, "--truncated needs --spine"
+    assert not (args.spine and args.hint) or args.truncated, "--spine --hint is only built for --truncated crops"
     in_ch = 2 if args.hint else 1
     out_ch = 2 if args.spine else 1
     if args.spine and args.cldice:
         prefix = "refiner_v6_full" if args.full_data else "refiner_v6"
+    elif args.spine and args.truncated:
+        prefix = (f"refiner_v8_trunc{args.truncated}_hint" if args.hint else f"refiner_v7_trunc{args.truncated}") \
+            + ("_full" if args.full_data else "")
     elif args.spine:
         prefix = "refiner_v5_full" if args.full_data else "refiner_v5"
     elif args.cldice:
@@ -250,9 +262,11 @@ def main():
 
     if args.spine:
         from crop_dataset import SpineCropDataset
-        tr_img, tr_mask, tr_spine, va_img, va_mask, va_spine = ensure_spine_crop_cache(args.full_data)
-        train_ds = SpineCropDataset(tr_img, tr_mask, tr_spine, augment=True)
-        val_ds = SpineCropDataset(va_img, va_mask, va_spine, augment=False) if va_img else None
+        tr_img, tr_mask, tr_spine, tr_hint, va_img, va_mask, va_spine, va_hint = ensure_spine_crop_cache(
+            args.full_data, args.truncated, args.hint)
+        train_ds = SpineCropDataset(tr_img, tr_mask, tr_spine, augment=True, hint_path=tr_hint)
+        val_ds = (SpineCropDataset(va_img, va_mask, va_spine, augment=False, hint_path=va_hint)
+                  if va_img else None)
     else:
         DS = HintCropDataset if args.hint else CropDataset
         train_img, train_mask, val_img, val_mask = ensure_crop_cache()

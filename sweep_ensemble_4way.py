@@ -9,7 +9,21 @@ come from ensembling multiple sources, not tuning any single one -- this
 tests whether combining both non-transferring wins into the existing
 validated ensemble crosses the leaderboard's rounding threshold where
 neither did alone.
+
+The GPU pass caches every refined candidate (score, RLE, TP label) per
+source, so any subset can be re-evaluated on CPU afterwards:
+    python sweep_ensemble_4way.py                                  # GPU pass + full 4-way sweep
+    python sweep_ensemble_4way.py --from-cache --sources A B1280 B2048 --crossfit
+--crossfit fits each source's isotonic calibrator on one half of the val
+images and scores the other half (2-fold), instead of calibrating and
+scoring on the same 116 images -- the suspected cause of the 4-way's
+local-win/real-regression gap.
 """
+import argparse
+import os
+import pickle
+from pathlib import Path
+
 import numpy as np
 import torch
 import pycocotools.mask as mu
@@ -30,6 +44,10 @@ RTDETR_CKPT = "kaggle_kernel_rtdetr_cls/output/rtdetr_cls_best.pt"
 REFINER_CKPT = "checkpoints/refiner_v5_best.pt"
 FLOOR_A, FLOOR_B1280, FLOOR_B2048, FLOOR_C = 0.3, 0.05, 0.05, 0.05
 MIN_AREA = 20
+CACHE_PATH = "ensemble4_candidates.pkl"
+TEST_CACHE_PATH = "ensemble4_test_candidates.pkl"
+TEST_DIR = Path("data/MAGFiLO_1.0_Kaggle_2026/test/test_images")
+ALL_SOURCES = ["A", "B1280", "B2048", "C"]
 
 
 @torch.no_grad()
@@ -37,7 +55,11 @@ def refine_candidate(refiner, device, gray, coarse):
     x0, y0, x1, y1 = square_bounds(coarse.astype(bool))
     crop = np.array(Image.fromarray(gray[y0:y1, x0:x1]).resize(
         (CROP_SIZE, CROP_SIZE), Image.BILINEAR)).astype(np.float32) / 255.0
-    prob = refine_with_tta(refiner, device, np.stack([crop]))
+    channels = [crop]
+    if refiner.in_channels == 2:  # hint refiner (v8): the proposal itself, same frame
+        channels.append((np.array(Image.fromarray(coarse[y0:y1, x0:x1].astype(np.uint8) * 255).resize(
+            (CROP_SIZE, CROP_SIZE), Image.NEAREST)) > 127).astype(np.float32))
+    prob = refine_with_tta(refiner, device, np.stack(channels))
     side = y1 - y0
     prob_full = np.array(Image.fromarray((prob * 255).astype(np.uint8)).resize(
         (side, side), Image.BILINEAR)).astype(np.float32) / 255.0
@@ -57,22 +79,15 @@ def best_iou_against_gt(mask, gt_rles):
 
 def dedup_nms_rle(candidates, iou_thresh):
     candidates = sorted(candidates, key=lambda x: -x[0])
-    accepted, accepted_masks = [], []
-    for score, rle in candidates:
-        mask = mu.decode({"size": [H, W], "counts": rle.encode()})
-        is_dup = False
-        for amask in accepted_masks:
-            inter = np.logical_and(mask, amask).sum()
-            if inter == 0:
-                continue
-            union = np.logical_or(mask, amask).sum()
-            if inter / union > iou_thresh:
-                is_dup = True
-                break
-        if not is_dup:
-            accepted.append((score, rle))
-            accepted_masks.append(mask)
-    return accepted
+    if not candidates:
+        return []
+    rles = [{"size": [H, W], "counts": r.encode()} for _, r in candidates]
+    iou = mu.iou(rles, rles, [0] * len(rles))  # same IoU as dense masks, computed on RLE
+    accepted = []
+    for i in range(len(candidates)):
+        if all(iou[i, j] <= iou_thresh for j in accepted):
+            accepted.append(i)
+    return [candidates[i] for i in accepted]
 
 
 def paint_panoptic_rle(candidates, min_area=MIN_AREA):
@@ -123,8 +138,11 @@ def _yolo_style_candidates(model, img_path, imgsz, floor):
     return cands
 
 
-def main():
-    device = torch.device("cuda")
+def build_cache(test=False, sources=ALL_SOURCES):
+    """val: entries are (per_source, gt_rles), saved at the end.
+    test: entries are (per_source, image_stem) with label=0, saved every 10
+    images and resumed from the partial file -- the CPU test pass takes hours."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     stateA = torch.load(MASKRCNN_CKPT, map_location=device)
     detA = build_from_checkpoint(stateA, num_classes=2).to(device)
     detA.load_state_dict(stateA["model"])
@@ -132,7 +150,7 @@ def main():
     detA.eval()
 
     yolo = YOLO(YOLO_CKPT)
-    rtdetr = RTDETR(RTDETR_CKPT)
+    rtdetr = RTDETR(RTDETR_CKPT) if "C" in sources else None
 
     rstate = torch.load(REFINER_CKPT, map_location=device)
     refiner = RefinerUNet(in_channels=rstate.get("in_channels", 1),
@@ -140,15 +158,24 @@ def main():
     refiner.load_state_dict(rstate["model"])
     refiner.eval()
 
-    _, val_entries, per_image = train_val_split(val_frac=0.1, seed=0)
+    if test:
+        out_path = TEST_CACHE_PATH
+        items = [(p, p.stem, None) for p in sorted(TEST_DIR.iterdir())]
+    else:
+        out_path = CACHE_PATH
+        _, val_entries, per_image = train_val_split(val_frac=0.1, seed=0)
+        items = [(IMG_DIR / e["file_name"], None, per_image.get(e["id"], [])) for e in val_entries]
 
     per_image_cache = []
-    scores_all = {"A": [], "B1280": [], "B2048": [], "C": []}
-    labels_all = {"A": [], "B1280": [], "B2048": [], "C": []}
+    if test and os.path.exists(out_path + ".partial"):
+        with open(out_path + ".partial", "rb") as f:
+            per_image_cache = pickle.load(f)
+        print(f"resuming test cache at {len(per_image_cache)}/{len(items)}", flush=True)
 
     with torch.no_grad():
-        for i, e in enumerate(val_entries, 1):
-            img_path = IMG_DIR / e["file_name"]
+        for i, (img_path, stem, anns) in enumerate(items, 1):
+            if i <= len(per_image_cache):
+                continue
             gray = np.array(Image.open(img_path).convert("L"))
             rgb = np.array(Image.open(img_path).convert("RGB"))
             img_t = torch.from_numpy(rgb).permute(2, 0, 1).float() / 255.0
@@ -160,51 +187,103 @@ def main():
                           for j in range(len(scoresA))
                           if scoresA[j] >= FLOOR_A and (masksA[j, 0] > 0.5).sum() > 0]
 
-            candsB1280_raw = _yolo_style_candidates(yolo, img_path, 1280, FLOOR_B1280)
-            candsB2048_raw = _yolo_style_candidates(yolo, img_path, 2048, FLOOR_B2048)
-            candsC_raw = _yolo_style_candidates(rtdetr, img_path, 1280, FLOOR_C)
+            raw = {"A": candsA_raw,
+                   "B1280": _yolo_style_candidates(yolo, img_path, 1280, FLOOR_B1280),
+                   "B2048": _yolo_style_candidates(yolo, img_path, 2048, FLOOR_B2048)}
+            if rtdetr is not None:
+                raw["C"] = _yolo_style_candidates(rtdetr, img_path, 1280, FLOOR_C)
 
             gt = []
-            for a in per_image.get(e["id"], []):
+            for a in anns or []:
                 rles = mu.frPyObjects(a["segmentation"], H, W)
                 gt.append(to_rle(mu.decode(mu.merge(rles))))
             gt_dicts = [{"size": [H, W], "counts": r.encode()} for r in gt]
 
             per_source = {}
-            for key, cands in [("A", candsA_raw), ("B1280", candsB1280_raw),
-                                ("B2048", candsB2048_raw), ("C", candsC_raw)]:
+            for key in sources:
                 refined = []
-                for score, coarse in cands:
+                for score, coarse in raw[key]:
                     ref = refine_candidate(refiner, device, gray, coarse)
                     if ref.sum() == 0:
                         continue
                     label = 1 if best_iou_against_gt(ref, gt_dicts) > 0.5 else 0
-                    refined.append((score, to_rle(ref)))
-                    scores_all[key].append(score)
-                    labels_all[key].append(label)
+                    refined.append((score, to_rle(ref), label))
                 per_source[key] = refined
 
-            per_image_cache.append((per_source, gt))
-            if i % 20 == 0:
-                print(f"  cached {i}/{len(val_entries)}", flush=True)
+            per_image_cache.append((per_source, stem if test else gt))
+            if i % 10 == 0:
+                print(f"  cached {i}/{len(items)}", flush=True)
+                if test:
+                    with open(out_path + ".partial", "wb") as f:
+                        pickle.dump(per_image_cache, f)
 
-    for key in scores_all:
-        print(f"{key}: {len(scores_all[key])} candidates ({sum(labels_all[key])} TP)", flush=True)
+    with open(out_path, "wb") as f:
+        pickle.dump(per_image_cache, f)
+    print(f"saved {out_path}", flush=True)
+    return per_image_cache
 
+
+def fit_calibrators(per_image_cache, sources, image_idx):
     cals = {}
-    for key in scores_all:
+    for key in sources:
+        scores = [s for i in image_idx for s, _, _ in per_image_cache[i][0][key]]
+        labels = [l for i in image_idx for _, _, l in per_image_cache[i][0][key]]
         cal = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
-        cal.fit(scores_all[key], labels_all[key])
+        cal.fit(scores, labels)
         cals[key] = cal
+    return cals
 
-    calibrated_cache = []
-    for per_source, gt in per_image_cache:
-        pooled = []
-        for key, refined in per_source.items():
-            if refined:
-                cs = cals[key].predict([s for s, _ in refined])
-                pooled.extend((float(c), r) for c, (_, r) in zip(cs, refined))
-        calibrated_cache.append((pooled, gt))
+
+def calibrate(per_image_cache, sources, crossfit):
+    n = len(per_image_cache)
+    if crossfit:
+        # 2-fold: each image is scored by calibrators that never saw it
+        folds = [(list(range(f, n, 2)), [i for i in range(n) if i % 2 != f]) for f in (0, 1)]
+    else:
+        folds = [(list(range(n)), list(range(n)))]
+    pooled_by_image = [None] * n
+    for score_idx, fit_idx in folds:
+        cals = fit_calibrators(per_image_cache, sources, fit_idx)
+        for i in score_idx:
+            per_source, gt = per_image_cache[i]
+            pooled = []
+            for key in sources:
+                refined = per_source[key]
+                if refined:
+                    cs = cals[key].predict([s for s, _, _ in refined])
+                    pooled.extend((float(c), r) for c, (_, r, _) in zip(cs, refined))
+            pooled_by_image[i] = (pooled, gt)
+    return pooled_by_image
+
+
+def main():
+    global REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH
+    p = argparse.ArgumentParser()
+    p.add_argument("--from-cache", action="store_true")
+    p.add_argument("--sources", nargs="+", default=ALL_SOURCES, choices=ALL_SOURCES)
+    p.add_argument("--crossfit", action="store_true")
+    p.add_argument("--build-test-cache", action="store_true")
+    p.add_argument("--refiner", default=REFINER_CKPT)
+    p.add_argument("--cache", default=CACHE_PATH, help="val candidate cache path")
+    p.add_argument("--test-cache", default=TEST_CACHE_PATH)
+    args = p.parse_args()
+    REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH = args.refiner, args.cache, args.test_cache
+
+    if args.build_test_cache:
+        build_cache(test=True, sources=args.sources)
+        return
+    if args.from_cache:
+        with open(CACHE_PATH, "rb") as f:
+            per_image_cache = pickle.load(f)
+    else:
+        per_image_cache = build_cache(sources=args.sources)
+
+    for key in args.sources:
+        cands = [c for per_source, _ in per_image_cache for c in per_source[key]]
+        print(f"{key}: {len(cands)} candidates ({sum(l for _, _, l in cands)} TP)", flush=True)
+    print(f"sources={args.sources} crossfit={args.crossfit}", flush=True)
+
+    calibrated_cache = calibrate(per_image_cache, args.sources, args.crossfit)
     del per_image_cache
 
     def pq_for(dedup_iou, accept_thresh):

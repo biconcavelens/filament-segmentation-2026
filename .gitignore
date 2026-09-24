@@ -32,3 +32,8 @@ __pycache__/
 
 # Local tooling config
 .claude/
+
+# Candidate caches and resume markers (regenerable)
+*.pkl
+*.partial
+*.done
