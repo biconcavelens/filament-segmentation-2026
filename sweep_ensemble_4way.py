@@ -262,7 +262,8 @@ def main():
     global REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH, MASKRCNN_CKPT, YOLO_CKPT
     p = argparse.ArgumentParser()
     p.add_argument("--from-cache", action="store_true")
-    p.add_argument("--sources", nargs="+", default=ALL_SOURCES, choices=ALL_SOURCES)
+    p.add_argument("--sources", nargs="+", default=ALL_SOURCES,
+                   help="cache source keys; building only knows ALL_SOURCES, merged caches may add more")
     p.add_argument("--crossfit", action="store_true")
     p.add_argument("--build-test-cache", action="store_true")
     p.add_argument("--refiner", default=REFINER_CKPT)

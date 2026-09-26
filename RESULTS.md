@@ -62,6 +62,11 @@
 | 0.39 | Stacked 3-way: native-2048 Mask R-CNN + YOLO11m@1280 + RT-DETR(cls2.0), dedup 0.05, accept 0.5. Val PQ 0.4477 (0.4481 plateau), ahead of the deployed 2-way on 5/5 random fold seeds (+0.003..+0.009, mean +0.0065) -- the strongest robust local evidence so far. **Real: 0.39** (tie) |
 | 0.39 | + **semantic/instance fusion** (`sweep_semantic_fusion.py`, `predict_fusion.py`): a full-image U-Net (`train_unet.py`, 1024px, val Dice 0.690) predicts filament foreground; each kept instance is watershed-grown into connected foreground within 100px. At U-Net threshold 0.7: val PQ 0.4477 -> 0.4505 (TP 549 -> 559, FP 209 -> 199) -- the first tail-completion method that helps at all. Looser thresholds widen masks (0.5: 0.436, 0.3: 0.396); turning unclaimed foreground blobs into new instances floods FPs (0.410-0.439). **Real: 0.39** (tie) |
 
+| (not submitted) | YOLO11m-seg **trained** at native 2048 on Kaggle (`kaggle_kernel_yolo_hires`, 79 epochs in a 9h `time=` budget, mask mAP50 0.611) -- removes the train/inference resolution mismatch suspected of sinking YOLO@2048 inference. Still hurts every ensemble it joins: replacing YOLO11m@1280 in the 3-way 0.4477 -> 0.4418, added alongside it 0.4460. Native resolution doesn't help YOLO here, mismatch or not |
+| 0.39 | YOLO11l-seg@1280 (`kaggle_kernel_yolo11l`, 103 epochs, mask mAP50 0.669) added *alongside* YOLO11m in the 3-way: val 0.4477 -> 0.4488 (replacing 11m instead: 0.4455); + fusion (p>0.7, grow 100): 0.4505, TP 566 -> 574. **Real: 0.39** |
+
+**Where this leaves things:** local val PQ of the best pipeline went 0.4407 -> 0.4505 over these experiments (+0.01, robust across fold seeds for the native-2048 Mask R-CNN part), and six structurally different submissions all score 0.39 publicly. The public score's 2-decimal resolution plus the val/test gap hides changes of this size; reaching 0.41 would need a step change of roughly +0.02 more on top.
+
 See `README.md` for the architecture writeup and the full table of rejected
 approaches with local numbers, and individual commit messages for the
 reasoning behind each result.

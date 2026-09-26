@@ -26,7 +26,7 @@ def gray(path):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--sources", nargs="+", default=["A", "B1280", "B2048"], choices=ALL_SOURCES)
+    p.add_argument("--sources", nargs="+", default=["A", "B1280", "B2048"])
     p.add_argument("--accept", type=float, required=True)
     p.add_argument("--dedup", type=float, default=0.05)
     p.add_argument("--contrast", action="store_true")
