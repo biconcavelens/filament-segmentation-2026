@@ -259,7 +259,7 @@ def calibrate(per_image_cache, sources, crossfit):
 
 
 def main():
-    global REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH, MASKRCNN_CKPT
+    global REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH, MASKRCNN_CKPT, YOLO_CKPT
     p = argparse.ArgumentParser()
     p.add_argument("--from-cache", action="store_true")
     p.add_argument("--sources", nargs="+", default=ALL_SOURCES, choices=ALL_SOURCES)
@@ -267,11 +267,12 @@ def main():
     p.add_argument("--build-test-cache", action="store_true")
     p.add_argument("--refiner", default=REFINER_CKPT)
     p.add_argument("--maskrcnn", default=MASKRCNN_CKPT)
+    p.add_argument("--yolo", default=YOLO_CKPT, help="YOLO weights for the B1280/B2048 sources")
     p.add_argument("--cache", default=CACHE_PATH, help="val candidate cache path")
     p.add_argument("--test-cache", default=TEST_CACHE_PATH)
     args = p.parse_args()
     REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH = args.refiner, args.cache, args.test_cache
-    MASKRCNN_CKPT = args.maskrcnn
+    MASKRCNN_CKPT, YOLO_CKPT = args.maskrcnn, args.yolo
 
     if args.build_test_cache:
         build_cache(test=True, sources=args.sources)

@@ -1,0 +1,16 @@
+{
+  "id": "trishanthmellimi/filament-yolo11l-cls-1280",
+  "title": "filament-yolo11l-cls-1280",
+  "code_file": "train_yolo11l_kaggle.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "trishanthmellimi/filament-seg-checkpoints"
+  ],
+  "competition_sources": [
+    "filament-segmentation-2026"
+  ]
+}

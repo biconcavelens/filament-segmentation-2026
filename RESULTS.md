@@ -59,6 +59,9 @@
 
 | 0.39 | Mask R-CNN retrained at **native 2048px** (`train_maskrcnn_hires.py`; every earlier Mask R-CNN ran at 800/1333, a leftover 8GB-GPU limit -- native res peaks at only 4.2GB with AMP, bs 1) with the same cls-weighted recipe, in the 2-way with YOLO11m@1280 (`predict_rescorer.py --isotonic --sources A B1280 --accept 0.45`). Fewer Mask R-CNN candidates (1506 vs 1590) at the same TP count (714 vs 717); 2-way val PQ 0.4407 -> 0.4440, ahead on 5/5 random fold seeds (+0.001..+0.005). **Real: 0.39**, ties the best -- and, unlike YOLO@2048 (trained at 1280, *run* at 2048: 0.38 three times), no regression, which points at YOLO@2048's train/inference resolution mismatch rather than resolution itself |
 
+| 0.39 | Stacked 3-way: native-2048 Mask R-CNN + YOLO11m@1280 + RT-DETR(cls2.0), dedup 0.05, accept 0.5. Val PQ 0.4477 (0.4481 plateau), ahead of the deployed 2-way on 5/5 random fold seeds (+0.003..+0.009, mean +0.0065) -- the strongest robust local evidence so far. **Real: 0.39** (tie) |
+| 0.39 | + **semantic/instance fusion** (`sweep_semantic_fusion.py`, `predict_fusion.py`): a full-image U-Net (`train_unet.py`, 1024px, val Dice 0.690) predicts filament foreground; each kept instance is watershed-grown into connected foreground within 100px. At U-Net threshold 0.7: val PQ 0.4477 -> 0.4505 (TP 549 -> 559, FP 209 -> 199) -- the first tail-completion method that helps at all. Looser thresholds widen masks (0.5: 0.436, 0.3: 0.396); turning unclaimed foreground blobs into new instances floods FPs (0.410-0.439). **Real: 0.39** (tie) |
+
 See `README.md` for the architecture writeup and the full table of rejected
 approaches with local numbers, and individual commit messages for the
 reasoning behind each result.
