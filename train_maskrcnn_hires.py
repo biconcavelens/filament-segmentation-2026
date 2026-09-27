@@ -28,9 +28,10 @@ def main():
     p.add_argument("--batch-size", type=int, default=1)
     p.add_argument("--cls-weight", type=float, default=3.0)
     p.add_argument("--max-steps", type=int, default=0, help="stop each epoch early (smoke test)")
+    p.add_argument("--backbone", help="ResNet-50 body weights from pretrain_ssl.py (FPN/RPN/heads stay COCO)")
     args = p.parse_args()
     lr = 0.005 * args.batch_size / 2  # the kernel used 0.005 at batch 2; linear scaling
-    name = f"maskrcnn_hires{args.min_size}"
+    name = f"maskrcnn_hires{args.min_size}" + ("_ssl" if args.backbone else "")
 
     device = torch.device("cuda")
     train_entries, _, per_image = train_val_split(val_frac=0.1, seed=0)
@@ -40,6 +41,9 @@ def main():
 
     model = build_model(num_classes=2)
     model.transform.min_size, model.transform.max_size = (args.min_size,), args.max_size
+    if args.backbone:
+        model.backbone.body.load_state_dict(torch.load(args.backbone, map_location="cpu")["body"])  # strict
+        print(f"loaded SSL backbone {args.backbone}", flush=True)
     model.to(device)
     params = [q for q in model.parameters() if q.requires_grad]
     optimizer = torch.optim.SGD(params, lr=lr, momentum=0.9, weight_decay=5e-4)
