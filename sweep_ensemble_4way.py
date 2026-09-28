@@ -139,9 +139,9 @@ def _yolo_style_candidates(model, img_path, imgsz, floor):
 
 
 def build_cache(test=False, sources=ALL_SOURCES):
-    """val: entries are (per_source, gt_rles), saved at the end.
-    test: entries are (per_source, image_stem) with label=0, saved every 10
-    images and resumed from the partial file -- the CPU test pass takes hours."""
+    """val: entries are (per_source, gt_rles); test: (per_source, image_stem)
+    with label=0. Both save a .partial every 10 images and resume from it --
+    long passes have died mid-way to laptop bugchecks."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     stateA = torch.load(MASKRCNN_CKPT, map_location=device)
     detA = build_from_checkpoint(stateA, num_classes=2).to(device)
@@ -167,10 +167,10 @@ def build_cache(test=False, sources=ALL_SOURCES):
         items = [(IMG_DIR / e["file_name"], None, per_image.get(e["id"], [])) for e in val_entries]
 
     per_image_cache = []
-    if test and os.path.exists(out_path + ".partial"):
+    if os.path.exists(out_path + ".partial"):
         with open(out_path + ".partial", "rb") as f:
             per_image_cache = pickle.load(f)
-        print(f"resuming test cache at {len(per_image_cache)}/{len(items)}", flush=True)
+        print(f"resuming cache at {len(per_image_cache)}/{len(items)}", flush=True)
 
     with torch.no_grad():
         for i, (img_path, stem, anns) in enumerate(items, 1):
@@ -215,9 +215,8 @@ def build_cache(test=False, sources=ALL_SOURCES):
             per_image_cache.append((per_source, stem if test else gt))
             if i % 10 == 0:
                 print(f"  cached {i}/{len(items)}", flush=True)
-                if test:
-                    with open(out_path + ".partial", "wb") as f:
-                        pickle.dump(per_image_cache, f)
+                with open(out_path + ".partial", "wb") as f:  # a crash costs at most 10 images
+                    pickle.dump(per_image_cache, f)
 
     with open(out_path, "wb") as f:
         pickle.dump(per_image_cache, f)
