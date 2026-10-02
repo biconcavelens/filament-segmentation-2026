@@ -36,11 +36,11 @@ CONFIGS = [  # (context, union_with_previous, iterations)
 def refine(refiner, gray, mask, context):
     x0, y0, x1, y1 = square_bounds(mask.astype(bool), context=context)
     crop = np.array(Image.fromarray(gray[y0:y1, x0:x1]).resize(
-        (CROP_SIZE, CROP_SIZE), Image.BILINEAR)).astype(np.float32) / 255.0
+        (refiner.crop_size, refiner.crop_size), Image.BILINEAR)).astype(np.float32) / 255.0
     channels = [crop]
     if refiner.in_channels == 2:  # hint refiner: the mask being re-refined is the hint
         channels.append((np.array(Image.fromarray(mask[y0:y1, x0:x1].astype(np.uint8) * 255).resize(
-            (CROP_SIZE, CROP_SIZE), Image.NEAREST)) > 127).astype(np.float32))
+            (refiner.crop_size, refiner.crop_size), Image.NEAREST)) > 127).astype(np.float32))
     prob = refine_with_tta(refiner, DEVICE, np.stack(channels))
     side = y1 - y0
     prob_full = np.array(Image.fromarray((prob * 255).astype(np.uint8)).resize(
@@ -70,6 +70,7 @@ def main():
     refiner = RefinerUNet(in_channels=rstate.get("in_channels", 1),
                           out_channels=rstate.get("out_channels", 1)).to(DEVICE)
     refiner.load_state_dict(rstate["model"])
+    refiner.crop_size = rstate.get("crop_size", CROP_SIZE)
     refiner.eval()
 
     cache = pickle.load(open(CACHE_PATH, "rb"))

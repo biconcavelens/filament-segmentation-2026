@@ -112,7 +112,8 @@ def box_fill(m: np.ndarray) -> np.ndarray:
 
 
 def build_spine_crop_cache(entries: list[dict], per_image: dict, cache_dir: Path, prefix: str,
-                           n_trunc: int = 0, seed: int = 0, with_hint: bool = False):
+                           n_trunc: int = 0, seed: int = 0, with_hint: bool = False,
+                           crop_size: int = CROP_SIZE):
     """Like build_crop_cache, but also rasterizes each filament's manually
     annotated GT spine (centerline polyline) into the same crop frame. The
     host confirmed spine data is fair to use as auxiliary training
@@ -141,13 +142,13 @@ def build_spine_crop_cache(entries: list[dict], per_image: dict, cache_dir: Path
 
     total = sum(len(per_image.get(e["id"], [])) for e in entries) * (1 + n_trunc)
     images = np.lib.format.open_memmap(img_path, mode="w+", dtype=np.uint8,
-                                        shape=(total, CROP_SIZE, CROP_SIZE))
+                                        shape=(total, crop_size, crop_size))
     masks = np.lib.format.open_memmap(mask_path, mode="w+", dtype=np.uint8,
-                                       shape=(total, CROP_SIZE, CROP_SIZE))
+                                       shape=(total, crop_size, crop_size))
     spines = np.lib.format.open_memmap(spine_path, mode="w+", dtype=np.uint8,
-                                        shape=(total, CROP_SIZE, CROP_SIZE))
+                                        shape=(total, crop_size, crop_size))
     hints = (np.lib.format.open_memmap(hint_path, mode="w+", dtype=np.uint8,
-                                       shape=(total, CROP_SIZE, CROP_SIZE)) if with_hint else None)
+                                       shape=(total, crop_size, crop_size)) if with_hint else None)
 
     pos = 0
     for e in entries:
@@ -170,11 +171,11 @@ def build_spine_crop_cache(entries: list[dict], per_image: dict, cache_dir: Path
             for window_mask in [m] + [truncate_mask(m, rng) for _ in range(n_trunc)]:
                 x0, y0, x1, y1 = square_bounds(window_mask)
                 crop_img = np.array(Image.fromarray(img[y0:y1, x0:x1]).resize(
-                    (CROP_SIZE, CROP_SIZE), Image.BILINEAR))
+                    (crop_size, crop_size), Image.BILINEAR))
                 crop_mask = np.array(Image.fromarray(m[y0:y1, x0:x1] * 255).resize(
-                    (CROP_SIZE, CROP_SIZE), Image.NEAREST))
+                    (crop_size, crop_size), Image.NEAREST))
                 crop_spine = np.array(Image.fromarray(spine_full[y0:y1, x0:x1] * 255).resize(
-                    (CROP_SIZE, CROP_SIZE), Image.NEAREST))
+                    (crop_size, crop_size), Image.NEAREST))
 
                 images[pos] = crop_img
                 masks[pos] = (crop_mask > 127).astype(np.uint8)
@@ -182,7 +183,7 @@ def build_spine_crop_cache(entries: list[dict], per_image: dict, cache_dir: Path
                 if with_hint:
                     h = box_fill(window_mask) if rng.random() < 0.5 else window_mask
                     hints[pos] = np.array(Image.fromarray(h[y0:y1, x0:x1] * 255).resize(
-                        (CROP_SIZE, CROP_SIZE), Image.NEAREST)) > 127
+                        (crop_size, crop_size), Image.NEAREST)) > 127
                 pos += 1
 
     images.flush(); masks.flush(); spines.flush()

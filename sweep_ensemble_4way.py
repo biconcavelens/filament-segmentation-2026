@@ -54,11 +54,11 @@ ALL_SOURCES = ["A", "B1280", "B2048", "C"]
 def refine_candidate(refiner, device, gray, coarse):
     x0, y0, x1, y1 = square_bounds(coarse.astype(bool))
     crop = np.array(Image.fromarray(gray[y0:y1, x0:x1]).resize(
-        (CROP_SIZE, CROP_SIZE), Image.BILINEAR)).astype(np.float32) / 255.0
+        (refiner.crop_size, refiner.crop_size), Image.BILINEAR)).astype(np.float32) / 255.0
     channels = [crop]
     if refiner.in_channels == 2:  # hint refiner (v8): the proposal itself, same frame
         channels.append((np.array(Image.fromarray(coarse[y0:y1, x0:x1].astype(np.uint8) * 255).resize(
-            (CROP_SIZE, CROP_SIZE), Image.NEAREST)) > 127).astype(np.float32))
+            (refiner.crop_size, refiner.crop_size), Image.NEAREST)) > 127).astype(np.float32))
     prob = refine_with_tta(refiner, device, np.stack(channels))
     side = y1 - y0
     prob_full = np.array(Image.fromarray((prob * 255).astype(np.uint8)).resize(
@@ -156,6 +156,7 @@ def build_cache(test=False, sources=ALL_SOURCES):
     refiner = RefinerUNet(in_channels=rstate.get("in_channels", 1),
                            out_channels=rstate.get("out_channels", 1)).to(device)
     refiner.load_state_dict(rstate["model"])
+    refiner.crop_size = rstate.get("crop_size", CROP_SIZE)
     refiner.eval()
 
     if test:

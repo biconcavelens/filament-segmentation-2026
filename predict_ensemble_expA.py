@@ -52,6 +52,7 @@ def load_models(device):
     refiner = RefinerUNet(in_channels=rstate.get("in_channels", 1),
                           out_channels=rstate.get("out_channels", 1)).to(device)
     refiner.load_state_dict(rstate["model"])
+    refiner.crop_size = rstate.get("crop_size", 256)
     refiner.eval()
     return detA, YOLO(YOLO_CKPT), refiner
 

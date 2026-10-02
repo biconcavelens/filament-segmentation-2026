@@ -189,21 +189,26 @@ SPINE_CACHE_DIR = Path("spine_crop_cache")
 SPINE_CACHE_DIR_FULL = Path("spine_crop_cache_full")
 
 
-def ensure_spine_crop_cache(full_data: bool = False, n_trunc: int = 0, hint: bool = False):
+def ensure_spine_crop_cache(full_data: bool = False, n_trunc: int = 0, hint: bool = False,
+                            crop_size: int = CROP_SIZE):
     """Returns (train_img, train_mask, train_spine, train_hint,
     val_img, val_mask, val_spine, val_hint); hint paths are None unless hint."""
     from crop_dataset import build_spine_crop_cache
     cache_dir = SPINE_CACHE_DIR_FULL if full_data else SPINE_CACHE_DIR
     if n_trunc:
         cache_dir = Path(f"{cache_dir}_trunc{n_trunc}" + ("_hint" if hint else ""))
+    if crop_size != CROP_SIZE:
+        cache_dir = Path(f"{cache_dir}_c{crop_size}")
     val_frac = 0 if full_data else 0.1
     train_entries, val_entries, per_image = train_val_split(val_frac=val_frac, seed=0)
     train_img = cache_dir / "train_images.npy"
     if not train_img.exists():
         print("building spine crop cache (one-time)...", flush=True)
-        build_spine_crop_cache(train_entries, per_image, cache_dir, "train", n_trunc=n_trunc, with_hint=hint)
+        build_spine_crop_cache(train_entries, per_image, cache_dir, "train", n_trunc=n_trunc, with_hint=hint,
+                               crop_size=crop_size)
         if val_entries:
-            build_spine_crop_cache(val_entries, per_image, cache_dir, "val", n_trunc=n_trunc, with_hint=hint)
+            build_spine_crop_cache(val_entries, per_image, cache_dir, "val", n_trunc=n_trunc, with_hint=hint,
+                                   crop_size=crop_size)
     kinds = ("images", "masks", "spines", "hints")
     out = []
     for split in ("train", "val"):
@@ -239,6 +244,8 @@ def main():
                          "for the already-validated v5 recipe")
     p.add_argument("--truncated", type=int, default=0,
                     help="with --spine: add N truncated-proposal-window crops per instance (refiner v7)")
+    p.add_argument("--crop-size", type=int, default=CROP_SIZE,
+                    help="with --spine: refine at this resolution; thin barbs blur away at 256 (refiner v9)")
     args = p.parse_args()
     assert not args.truncated or args.spine, "--truncated needs --spine"
     assert not (args.spine and args.hint) or args.truncated, "--spine --hint is only built for --truncated crops"
@@ -249,6 +256,8 @@ def main():
     elif args.spine and args.truncated:
         prefix = (f"refiner_v8_trunc{args.truncated}_hint" if args.hint else f"refiner_v7_trunc{args.truncated}") \
             + ("_full" if args.full_data else "")
+    elif args.spine and args.crop_size != CROP_SIZE:
+        prefix = f"refiner_v9_c{args.crop_size}" + ("_full" if args.full_data else "")
     elif args.spine:
         prefix = "refiner_v5_full" if args.full_data else "refiner_v5"
     elif args.cldice:
@@ -263,7 +272,7 @@ def main():
     if args.spine:
         from crop_dataset import SpineCropDataset
         tr_img, tr_mask, tr_spine, tr_hint, va_img, va_mask, va_spine, va_hint = ensure_spine_crop_cache(
-            args.full_data, args.truncated, args.hint)
+            args.full_data, args.truncated, args.hint, args.crop_size)
         train_ds = SpineCropDataset(tr_img, tr_mask, tr_spine, augment=True, hint_path=tr_hint)
         val_ds = (SpineCropDataset(va_img, va_mask, va_spine, augment=False, hint_path=va_hint)
                   if va_img else None)
@@ -311,7 +320,7 @@ def main():
               f"val_loss={val_loss:.4f} ({time.time()-t0:.0f}s)")
 
         payload = {"model": model.state_dict(), "epoch": epoch,
-                   "in_channels": in_ch, "out_channels": out_ch}
+                   "in_channels": in_ch, "out_channels": out_ch, "crop_size": args.crop_size}
         torch.save(payload, CKPT_DIR / f"{prefix}_epoch{epoch}.pt")
         if val_loader and val_loss < best_val:
             best_val = val_loss

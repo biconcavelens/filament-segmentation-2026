@@ -1,0 +1,11 @@
+{
+  "id": "trishanthmellimi/filament-m2f-unfrozen",
+  "title": "filament-m2f-unfrozen",
+  "code_file": "train_m2f_unfrozen.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "competition_sources": ["filament-segmentation-2026"]
+}
