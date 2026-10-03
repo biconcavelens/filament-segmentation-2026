@@ -274,6 +274,7 @@ def main():
     p.add_argument("--crop-size", type=int, default=CROP_SIZE,
                     help="with --spine: refine at this resolution; thin barbs blur away at 256 (refiner v9)")
     p.add_argument("--encoder", help="with --spine: ImageNet-pretrained smp encoder, e.g. resnet34 (refiner v10)")
+    p.add_argument("--prefix", help="override the checkpoint name prefix")
     p.add_argument("--resume", help="epoch checkpoint to continue from (weights only; lr schedule fast-forwarded)")
     args = p.parse_args()
     assert not args.truncated or args.spine, "--truncated needs --spine"
@@ -297,6 +298,7 @@ def main():
     else:
         prefix = "refiner_v2" if args.hint else "refiner"
 
+    prefix = args.prefix or prefix
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device:", device, "in_channels:", in_ch, "out_channels:", out_ch,
           "full_data:", args.full_data)
