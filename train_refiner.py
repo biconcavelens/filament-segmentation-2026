@@ -246,6 +246,7 @@ def main():
                     help="with --spine: add N truncated-proposal-window crops per instance (refiner v7)")
     p.add_argument("--crop-size", type=int, default=CROP_SIZE,
                     help="with --spine: refine at this resolution; thin barbs blur away at 256 (refiner v9)")
+    p.add_argument("--resume", help="epoch checkpoint to continue from (weights only; lr schedule fast-forwarded)")
     args = p.parse_args()
     assert not args.truncated or args.spine, "--truncated needs --spine"
     assert not (args.spine and args.hint) or args.truncated, "--spine --hint is only built for --truncated crops"
@@ -301,8 +302,22 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
-    best_val = float("inf")
-    for epoch in range(args.epochs):
+    best_val, start = float("inf"), 0
+    if args.resume:
+        state = torch.load(args.resume, map_location=device)
+        model.load_state_dict(state["model"])
+        start = state["epoch"] + 1
+        for _ in range(start):
+            scheduler.step()
+        best_path = CKPT_DIR / f"{prefix}_best.pt"
+        if best_path.exists() and val_loader:  # keep "best" honest across the restart
+            model_best = RefinerUNet(in_channels=in_ch, out_channels=out_ch).to(device)
+            model_best.load_state_dict(torch.load(best_path, map_location=device)["model"])
+            best_val = evaluate(model_best, val_loader, criterion, device)
+            del model_best
+        print(f"resumed from {args.resume} at epoch {start}, lr={scheduler.get_last_lr()[0]:.2e}, "
+              f"best val so far {best_val:.4f}", flush=True)
+    for epoch in range(start, args.epochs):
         model.train()
         t0 = time.time()
         running = 0.0
