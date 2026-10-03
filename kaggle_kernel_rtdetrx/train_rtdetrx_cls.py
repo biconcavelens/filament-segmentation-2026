@@ -1,4 +1,5 @@
 """[rtdetr-x variant: same cls=2.0 recipe as rtdetr-l (C, the strongest solo detector), bigger backbone,
+[v2: v1 hit "NaN persisted for 4 epochs" three times under AMP and early-stopped at epoch 4 -> amp=False, lr0 5e-5 (AdamW, ultralytics auto picks ~1e-4)]
 ultralytics time= budget so the kernel always completes; falls back to batch 1 on OOM.]
 """
 """Follow-up to the first RT-DETR run (defaults, solo PQ ~0.40, 3-way
@@ -126,7 +127,7 @@ def train_with_resume(data_yaml, epochs=EPOCHS, max_retries=6):
                 model = RTDETR("rtdetr-x.pt")
                 model.train(
                     data=str(data_yaml), epochs=epochs, batch=BATCH, imgsz=IMGSZ, time=TRAIN_HOURS,
-                    patience=15, seed=0, deterministic=True, cls=CLS_WEIGHT,
+                    patience=25, seed=0, deterministic=True, cls=CLS_WEIGHT, amp=False, optimizer="AdamW", lr0=5e-5,
                     project="/kaggle/working/runs/detect", name="filament_rtdetrx_cls",
                 )
             print("training finished normally", flush=True)
@@ -150,6 +151,7 @@ def main():
     out = Path("/kaggle/working/rtdetrx_cls_best.pt")
     shutil.copy(best, out)
     print(f"copied {best} -> {out}", flush=True)
+    shutil.rmtree(YOLO_ROOT, ignore_errors=True)  # thousands of image copies push outputs past the CLI's first page
 
 
 if __name__ == "__main__":
