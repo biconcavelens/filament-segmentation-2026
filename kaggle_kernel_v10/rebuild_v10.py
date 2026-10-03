@@ -24,13 +24,15 @@ if not link.exists():
     link.symlink_to(comp)
 os.chdir(WORK)
 
+REFINER, TAG = "refiner_v10_resnet34_c512_best.pt", "c512"  # per-run knobs (v1: refiner_v10_resnet34_best.pt, "v10")
 ck = {n: str(SRC / n) for n in ["maskrcnn_hires2048_epoch5.pt", "yolo11m_cls_best.pt", "yolo11l_cls_1280_best.pt",
-                                 "rtdetr_cls_best.pt", "refiner_v10_resnet34_best.pt"]}
+                                 "rtdetr_cls_best.pt"]}
+ck["refiner"] = str(next(Path("/kaggle/input").rglob(REFINER)))
 OUT = Path("/kaggle/working")
 
 
 def run(args):
-    cmd = [sys.executable, "-u", "sweep_ensemble_4way.py", "--refiner", ck["refiner_v10_resnet34_best.pt"],
+    cmd = [sys.executable, "-u", "sweep_ensemble_4way.py", "--refiner", ck["refiner"],
            "--maskrcnn", ck["maskrcnn_hires2048_epoch5.pt"]] + args
     print(" ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
@@ -42,8 +44,8 @@ s = s.replace('RTDETR_CKPT = "kaggle_kernel_rtdetr_cls/output/rtdetr_cls_best.pt
 (WORK / "sweep_ensemble_4way.py").write_text(s)
 
 m, l = ck["yolo11m_cls_best.pt"], ck["yolo11l_cls_1280_best.pt"]
-run(["--sources", "A", "B1280", "C", "--yolo", m, "--cache", str(OUT / "v10_val_ABC.pkl")])
-run(["--sources", "B1280", "--yolo", l, "--cache", str(OUT / "v10_val_L.pkl")])
-run(["--build-test-cache", "--sources", "A", "B1280", "C", "--yolo", m, "--test-cache", str(OUT / "v10_test_ABC.pkl")])
-run(["--build-test-cache", "--sources", "B1280", "--yolo", l, "--test-cache", str(OUT / "v10_test_L.pkl")])
+run(["--sources", "A", "B1280", "C", "--yolo", m, "--cache", str(OUT / f"{TAG}_val_ABC.pkl")])
+run(["--sources", "B1280", "--yolo", l, "--cache", str(OUT / f"{TAG}_val_L.pkl")])
+run(["--build-test-cache", "--sources", "A", "B1280", "C", "--yolo", m, "--test-cache", str(OUT / f"{TAG}_test_ABC.pkl")])
+run(["--build-test-cache", "--sources", "B1280", "--yolo", l, "--test-cache", str(OUT / f"{TAG}_test_L.pkl")])
 print("ALL DONE", flush=True)

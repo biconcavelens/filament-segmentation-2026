@@ -7,6 +7,6 @@
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": true,
-  "dataset_sources": ["trishanthmellimi/filament-v10-refiner-rebuild"],
+  "dataset_sources": ["trishanthmellimi/filament-v10-refiner-rebuild", "trishanthmellimi/filament-refiners-v10"],
   "competition_sources": ["filament-segmentation-2026"]
 }
