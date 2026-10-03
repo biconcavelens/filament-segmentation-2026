@@ -1,0 +1,12 @@
+{
+  "id": "trishanthmellimi/filament-v10-cache-rebuild",
+  "title": "filament-v10-cache-rebuild",
+  "code_file": "rebuild_v10.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["trishanthmellimi/filament-v10-refiner-rebuild"],
+  "competition_sources": ["filament-segmentation-2026"]
+}

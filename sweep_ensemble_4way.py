@@ -33,7 +33,7 @@ from sklearn.isotonic import IsotonicRegression
 
 from dataset import train_val_split, IMG_DIR, H, W
 from train import build_from_checkpoint
-from train_refiner import RefinerUNet
+from train_refiner import load_refiner
 from crop_dataset import square_bounds, CROP_SIZE
 from predict_trained import to_rle
 from predict_refined import refine_with_tta
@@ -152,12 +152,7 @@ def build_cache(test=False, sources=ALL_SOURCES):
     yolo = YOLO(YOLO_CKPT)
     rtdetr = RTDETR(RTDETR_CKPT) if "C" in sources else None
 
-    rstate = torch.load(REFINER_CKPT, map_location=device)
-    refiner = RefinerUNet(in_channels=rstate.get("in_channels", 1),
-                           out_channels=rstate.get("out_channels", 1)).to(device)
-    refiner.load_state_dict(rstate["model"])
-    refiner.crop_size = rstate.get("crop_size", CROP_SIZE)
-    refiner.eval()
+    refiner = load_refiner(REFINER_CKPT, device)
 
     if test:
         out_path = TEST_CACHE_PATH

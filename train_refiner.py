@@ -64,6 +64,33 @@ class RefinerUNet(nn.Module):
         return self.head(d1)
 
 
+class PretrainedRefiner(nn.Module):
+    """smp U-Net with an ImageNet-pretrained encoder (refiner v10); same I/O as
+    RefinerUNet: 1-channel [0,1] crop in, mask (+ spine) logits out."""
+
+    def __init__(self, encoder="resnet34", in_channels=1, out_channels=1, pretrained=True):
+        super().__init__()
+        import segmentation_models_pytorch as smp
+        self.in_channels, self.out_channels, self.encoder = in_channels, out_channels, encoder
+        self.net = smp.Unet(encoder, encoder_weights="imagenet" if pretrained else None,
+                            in_channels=in_channels, classes=out_channels)
+
+    def forward(self, x):
+        return self.net((x - 0.45) / 0.225)  # ImageNet gray mean/std
+
+
+def load_refiner(path, device):
+    """Any refiner checkpoint -> eval-mode model with .crop_size set."""
+    from crop_dataset import CROP_SIZE as default_crop
+    st = torch.load(path, map_location=device)
+    kw = dict(in_channels=st.get("in_channels", 1), out_channels=st.get("out_channels", 1))
+    model = (PretrainedRefiner(st["encoder"], pretrained=False, **kw) if st.get("encoder")
+             else RefinerUNet(**kw)).to(device)
+    model.load_state_dict(st["model"])
+    model.crop_size = st.get("crop_size", default_crop)
+    return model.eval()
+
+
 class DiceBCELoss(nn.Module):
     def __init__(self, bce_w=0.5, dice_w=0.5):
         super().__init__()
@@ -246,6 +273,7 @@ def main():
                     help="with --spine: add N truncated-proposal-window crops per instance (refiner v7)")
     p.add_argument("--crop-size", type=int, default=CROP_SIZE,
                     help="with --spine: refine at this resolution; thin barbs blur away at 256 (refiner v9)")
+    p.add_argument("--encoder", help="with --spine: ImageNet-pretrained smp encoder, e.g. resnet34 (refiner v10)")
     p.add_argument("--resume", help="epoch checkpoint to continue from (weights only; lr schedule fast-forwarded)")
     args = p.parse_args()
     assert not args.truncated or args.spine, "--truncated needs --spine"
@@ -256,6 +284,9 @@ def main():
         prefix = "refiner_v6_full" if args.full_data else "refiner_v6"
     elif args.spine and args.truncated:
         prefix = (f"refiner_v8_trunc{args.truncated}_hint" if args.hint else f"refiner_v7_trunc{args.truncated}") \
+            + ("_full" if args.full_data else "")
+    elif args.spine and args.encoder:
+        prefix = f"refiner_v10_{args.encoder}" + (f"_c{args.crop_size}" if args.crop_size != CROP_SIZE else "") \
             + ("_full" if args.full_data else "")
     elif args.spine and args.crop_size != CROP_SIZE:
         prefix = f"refiner_v9_c{args.crop_size}" + ("_full" if args.full_data else "")
@@ -290,7 +321,12 @@ def main():
                                                shuffle=False, num_workers=0)
                   if val_ds else [])
 
-    model = RefinerUNet(in_channels=in_ch, out_channels=out_ch).to(device)
+    def new_model(pretrained=True):
+        if args.encoder:
+            return PretrainedRefiner(args.encoder, in_ch, out_ch, pretrained).to(device)
+        return RefinerUNet(in_channels=in_ch, out_channels=out_ch).to(device)
+
+    model = new_model()
     if args.spine and args.cldice:
         criterion = MaskSpineClDiceLoss()
     elif args.spine:
@@ -311,7 +347,7 @@ def main():
             scheduler.step()
         best_path = CKPT_DIR / f"{prefix}_best.pt"
         if best_path.exists() and val_loader:  # keep "best" honest across the restart
-            model_best = RefinerUNet(in_channels=in_ch, out_channels=out_ch).to(device)
+            model_best = new_model(pretrained=False)
             model_best.load_state_dict(torch.load(best_path, map_location=device)["model"])
             best_val = evaluate(model_best, val_loader, criterion, device)
             del model_best
@@ -335,7 +371,8 @@ def main():
               f"val_loss={val_loss:.4f} ({time.time()-t0:.0f}s)")
 
         payload = {"model": model.state_dict(), "epoch": epoch,
-                   "in_channels": in_ch, "out_channels": out_ch, "crop_size": args.crop_size}
+                   "in_channels": in_ch, "out_channels": out_ch, "crop_size": args.crop_size,
+                   "encoder": args.encoder}
         torch.save(payload, CKPT_DIR / f"{prefix}_epoch{epoch}.pt")
         if val_loader and val_loss < best_val:
             best_val = val_loss

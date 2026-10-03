@@ -76,3 +76,5 @@
 See `README.md` for the architecture writeup and the full table of rejected
 approaches with local numbers, and individual commit messages for the
 reasoning behind each result.
+
+| 0.39 | **Pretrained-encoder refiner (v10)**: the crop refiner rebuilt as an smp U-Net with an ImageNet ResNet34 encoder (`train_refiner.py --spine --encoder resnet34 --lr 3e-4`, 15 epochs; `PretrainedRefiner`, `load_refiner`), replacing the 7.8M-param from-scratch U-Net. Val loss 0.1031 -> 0.0920; like-for-like re-refine (`sweep_grow.py`) 0.4367 -> 0.4409 (ResNet50: 0.4414, r34+r50 averaged: 0.4416 / 0.4428 @ cutoff 0.4; v5+v10 averaged 0.4411). Lower refiner cutoffs alone (0.45..0.2 on v5) are flat-to-worse. Rebuilt the deployed 4-way caches with v10 on Kaggle (`kaggle_kernel_v10`): out-of-fold 4-way PQ beats the v5 caches on **5/5 fold seeds, +0.0064..+0.0119 (mean +0.009), 4/5 bootstrap CIs excluding 0** -- the most robust local gain so far. + fusion (t0.7, g100), `submission_v10_4way_fusion.csv`. **Real: 0.39** |

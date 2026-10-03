@@ -21,7 +21,7 @@ from predict_refined import refine_with_tta
 from predict_trained import to_rle
 from sweep_ensemble_4way import (CACHE_PATH, H, W, REFINER_CKPT, fit_calibrators,
                                  dedup_nms_rle, paint_panoptic_rle, pq_against_gt)
-from train_refiner import RefinerUNet
+from train_refiner import load_refiner
 
 # the real-0.39 2-way pipeline (YOLO@2048 retired: every submission including it scored 0.38)
 SOURCES, ACCEPT, DEDUP = ["A", "B1280"], 0.45, 0.05
@@ -33,45 +33,50 @@ CONFIGS = [  # (context, union_with_previous, iterations)
 
 
 @torch.no_grad()
-def refine(refiner, gray, mask, context):
+def refine(refiner, gray, mask, context, thresholds=(0.5,)):
+    r0 = refiner[0] if isinstance(refiner, list) else refiner
     x0, y0, x1, y1 = square_bounds(mask.astype(bool), context=context)
     crop = np.array(Image.fromarray(gray[y0:y1, x0:x1]).resize(
-        (refiner.crop_size, refiner.crop_size), Image.BILINEAR)).astype(np.float32) / 255.0
+        (r0.crop_size, r0.crop_size), Image.BILINEAR)).astype(np.float32) / 255.0
     channels = [crop]
-    if refiner.in_channels == 2:  # hint refiner: the mask being re-refined is the hint
+    if r0.in_channels == 2:  # hint refiner: the mask being re-refined is the hint
         channels.append((np.array(Image.fromarray(mask[y0:y1, x0:x1].astype(np.uint8) * 255).resize(
-            (refiner.crop_size, refiner.crop_size), Image.NEAREST)) > 127).astype(np.float32))
-    prob = refine_with_tta(refiner, DEVICE, np.stack(channels))
+            (r0.crop_size, r0.crop_size), Image.NEAREST)) > 127).astype(np.float32))
+    refiners = refiner if isinstance(refiner, list) else [refiner]  # several: average their probabilities
+    prob = np.mean([refine_with_tta(r, DEVICE, np.stack(channels)) for r in refiners], axis=0)
     side = y1 - y0
     prob_full = np.array(Image.fromarray((prob * 255).astype(np.uint8)).resize(
         (side, side), Image.BILINEAR)).astype(np.float32) / 255.0
-    out = np.zeros((H, W), dtype=np.uint8)
-    out[y0:y1, x0:x1] = prob_full > 0.5
-    return out
+    outs = []
+    for t in thresholds:
+        out = np.zeros((H, W), dtype=np.uint8)
+        out[y0:y1, x0:x1] = prob_full > t
+        outs.append(out)
+    return outs[0] if len(outs) == 1 else outs
 
 
 def main():
     global CONFIGS, DEVICE
     import argparse
     p = argparse.ArgumentParser()
-    p.add_argument("--refiner", default=REFINER_CKPT)
+    p.add_argument("--refiner", default=REFINER_CKPT, help="comma list averages several refiners")
     p.add_argument("--base-only", action="store_true",
                    help="only re-refine at the normal context (compare refiners like-for-like)")
     p.add_argument("--cpu", action="store_true")
+    p.add_argument("--thresholds", default=None,
+                   help="comma list: re-refine once at context 1.8 and cut the refiner probability at each")
     args = p.parse_args()
+    thresholds = [float(t) for t in args.thresholds.split(",")] if args.thresholds else None
+    if thresholds:
+        CONFIGS = [(1.8, False, t) for t in thresholds]  # 3rd field reused as the threshold
     if args.base_only:
         CONFIGS = [(1.8, False, 1)]
     if args.cpu:
         DEVICE = torch.device("cpu")
     print(f"refiner={args.refiner} device={DEVICE}", flush=True)
 
-    torch.set_num_threads(2)
-    rstate = torch.load(args.refiner, map_location=DEVICE)
-    refiner = RefinerUNet(in_channels=rstate.get("in_channels", 1),
-                          out_channels=rstate.get("out_channels", 1)).to(DEVICE)
-    refiner.load_state_dict(rstate["model"])
-    refiner.crop_size = rstate.get("crop_size", CROP_SIZE)
-    refiner.eval()
+    torch.set_num_threads(8)
+    refiner = [load_refiner(r, DEVICE) for r in args.refiner.split(",")]
 
     cache = pickle.load(open(CACHE_PATH, "rb"))
     cals = fit_calibrators(cache, SOURCES, list(range(len(cache))))
@@ -95,6 +100,18 @@ def main():
             continue
         gray = np.array(Image.open(IMG_DIR / e["file_name"]).convert("L"))
         masks = [(s, mu.decode({"size": [H, W], "counts": r.encode()})) for s, r in deduped]
+        if thresholds:
+            per_t = [[] for _ in thresholds]
+            for s, m in masks:
+                for lst, new in zip(per_t, refine(refiner, gray, m, 1.8, thresholds + [0.5])[:len(thresholds)]):
+                    if new.sum():
+                        lst.append((s, to_rle(new)))
+            for cfg, grown in zip(CONFIGS, per_t):
+                res = pq_against_gt(paint_panoptic_rle(dedup_nms_rle(grown, DEDUP)), gt)
+                totals[cfg][0] += res[0]; totals[cfg][1] += res[1]; totals[cfg][2] += res[2]
+            if n_img % 20 == 0:
+                print(f"  {n_img}/{len(cache)} images", flush=True)
+            continue
         for cfg in CONFIGS:
             context, union, iters = cfg
             grown = []
