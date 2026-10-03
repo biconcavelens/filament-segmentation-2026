@@ -61,7 +61,7 @@ def image_features(per_source, sources, gray=None):
     rles = [{"size": [H, W], "counts": r.encode()} for _, _, r, _ in cands]
     iou = mu.iou(rles, rles, [0] * len(rles))
     np.fill_diagonal(iou, 0.0)
-    areas = mu.area(rles).astype(float)
+    areas = np.concatenate([mu.area(rles[i:i + 200]) for i in range(0, len(rles), 200)]).astype(float)  # pycocotools overflows past 255
     x, y, w, h = mu.toBbox(rles).T
     src = np.array([sources.index(s) for s, *_ in cands])
     scores = np.array([sc for _, sc, _, _ in cands])
