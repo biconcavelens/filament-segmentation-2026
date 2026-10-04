@@ -26,14 +26,17 @@ os.chdir(WORK)
 
 # per-run knobs (v1: refiner_v10_resnet34_best.pt/"v10", v2: refiner_v10_resnet34_c512_best.pt/"c512")
 # v3 (RT-DETR-x, C only, "cx") collapsed in training and was never run
-REFINER, TAG = "refiner_v10_resnet34_best.pt", "hf"
+# v4 ("hf"): EXTRA=["--hflip"], horizontal-flip TTA sources
+REFINER, TAG = "refiner_v10_resnet34_best.pt", "a2"
 RTDETR = "rtdetr_cls_best.pt"
-ONLY_C = False
-EXTRA = ["--hflip"]  # v4: horizontal-flip TTA sources
+MASKRCNN = "maskrcnn_hires2048_s2_epoch5.pt"  # v5: second-seed hires Mask R-CNN, source A only
+ONLY_C, ONLY_A = False, True
+EXTRA = []
 ck = {n: str(SRC / n) for n in ["maskrcnn_hires2048_epoch5.pt", "yolo11m_cls_best.pt", "yolo11l_cls_1280_best.pt",
                                  "rtdetr_cls_best.pt"]}
 ck["refiner"] = str(next(Path("/kaggle/input").rglob(REFINER)))
 ck["rtdetr_cls_best.pt"] = str(next(Path("/kaggle/input").rglob(RTDETR)))
+ck["maskrcnn_hires2048_epoch5.pt"] = str(next(Path("/kaggle/input").rglob(MASKRCNN)))
 OUT = Path("/kaggle/working")
 
 
@@ -50,6 +53,11 @@ s = s.replace('RTDETR_CKPT = "kaggle_kernel_rtdetr_cls/output/rtdetr_cls_best.pt
 (WORK / "sweep_ensemble_4way.py").write_text(s)
 
 m, l = ck["yolo11m_cls_best.pt"], ck["yolo11l_cls_1280_best.pt"]
+if ONLY_A:
+    run(["--sources", "A", "--yolo", m, "--cache", str(OUT / f"{TAG}_val_A.pkl")])
+    run(["--build-test-cache", "--sources", "A", "--yolo", m, "--test-cache", str(OUT / f"{TAG}_test_A.pkl")])
+    print("ALL DONE", flush=True)
+    sys.exit(0)
 if ONLY_C:
     run(["--sources", "C", "--cache", str(OUT / f"{TAG}_val_C.pkl")])
     run(["--build-test-cache", "--sources", "C", "--test-cache", str(OUT / f"{TAG}_test_C.pkl")])
