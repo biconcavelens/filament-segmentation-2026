@@ -24,16 +24,22 @@ if not link.exists():
     link.symlink_to(comp)
 os.chdir(WORK)
 
-REFINER, TAG = "refiner_v10_resnet34_c512_best.pt", "c512"  # per-run knobs (v1: refiner_v10_resnet34_best.pt, "v10")
+# per-run knobs (v1: refiner_v10_resnet34_best.pt/"v10", v2: refiner_v10_resnet34_c512_best.pt/"c512")
+# v3 (RT-DETR-x, C only, "cx") collapsed in training and was never run
+REFINER, TAG = "refiner_v10_resnet34_best.pt", "hf"
+RTDETR = "rtdetr_cls_best.pt"
+ONLY_C = False
+EXTRA = ["--hflip"]  # v4: horizontal-flip TTA sources
 ck = {n: str(SRC / n) for n in ["maskrcnn_hires2048_epoch5.pt", "yolo11m_cls_best.pt", "yolo11l_cls_1280_best.pt",
                                  "rtdetr_cls_best.pt"]}
 ck["refiner"] = str(next(Path("/kaggle/input").rglob(REFINER)))
+ck["rtdetr_cls_best.pt"] = str(next(Path("/kaggle/input").rglob(RTDETR)))
 OUT = Path("/kaggle/working")
 
 
 def run(args):
     cmd = [sys.executable, "-u", "sweep_ensemble_4way.py", "--refiner", ck["refiner"],
-           "--maskrcnn", ck["maskrcnn_hires2048_epoch5.pt"]] + args
+           "--maskrcnn", ck["maskrcnn_hires2048_epoch5.pt"]] + EXTRA + args
     print(" ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
 
@@ -44,6 +50,11 @@ s = s.replace('RTDETR_CKPT = "kaggle_kernel_rtdetr_cls/output/rtdetr_cls_best.pt
 (WORK / "sweep_ensemble_4way.py").write_text(s)
 
 m, l = ck["yolo11m_cls_best.pt"], ck["yolo11l_cls_1280_best.pt"]
+if ONLY_C:
+    run(["--sources", "C", "--cache", str(OUT / f"{TAG}_val_C.pkl")])
+    run(["--build-test-cache", "--sources", "C", "--test-cache", str(OUT / f"{TAG}_test_C.pkl")])
+    print("ALL DONE", flush=True)
+    sys.exit(0)
 run(["--sources", "A", "B1280", "C", "--yolo", m, "--cache", str(OUT / f"{TAG}_val_ABC.pkl")])
 run(["--sources", "B1280", "--yolo", l, "--cache", str(OUT / f"{TAG}_val_L.pkl")])
 run(["--build-test-cache", "--sources", "A", "B1280", "C", "--yolo", m, "--test-cache", str(OUT / f"{TAG}_test_ABC.pkl")])

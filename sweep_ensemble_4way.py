@@ -48,6 +48,7 @@ CACHE_PATH = "ensemble4_candidates.pkl"
 TEST_CACHE_PATH = "ensemble4_test_candidates.pkl"
 TEST_DIR = Path("data/MAGFiLO_1.0_Kaggle_2026/test/test_images")
 ALL_SOURCES = ["A", "B1280", "B2048", "C"]
+HFLIP = False  # --hflip: test-time horizontal flip, as extra sources to merge under new keys
 
 
 @torch.no_grad()
@@ -122,7 +123,8 @@ def pq_against_gt(kept_rles, gt_rles):
 
 
 def _yolo_style_candidates(model, img_path, imgsz, floor):
-    out = model.predict(source=str(img_path), imgsz=imgsz, conf=floor, verbose=False)[0]
+    src = img_path if isinstance(img_path, np.ndarray) else str(img_path)
+    out = model.predict(source=src, imgsz=imgsz, conf=floor, verbose=False)[0]
     cands = []
     if out.boxes is not None and len(out.boxes) > 0:
         boxes = out.boxes.xyxy.cpu().numpy()
@@ -174,6 +176,10 @@ def build_cache(test=False, sources=ALL_SOURCES):
                 continue
             gray = np.array(Image.open(img_path).convert("L"))
             rgb = np.array(Image.open(img_path).convert("RGB"))
+            src_img = img_path
+            if HFLIP:  # detectors see the mirrored image; proposals are mirrored back below
+                rgb = np.ascontiguousarray(rgb[:, ::-1])
+                src_img = np.ascontiguousarray(rgb[:, :, ::-1])  # ultralytics takes BGR arrays
             img_t = torch.from_numpy(rgb).permute(2, 0, 1).float() / 255.0
 
             outA = detA([img_t.to(device)])[0]
@@ -185,11 +191,13 @@ def build_cache(test=False, sources=ALL_SOURCES):
 
             raw = {"A": candsA_raw}
             if "B1280" in sources:
-                raw["B1280"] = _yolo_style_candidates(yolo, img_path, 1280, FLOOR_B1280)
+                raw["B1280"] = _yolo_style_candidates(yolo, src_img, 1280, FLOOR_B1280)
             if "B2048" in sources:
-                raw["B2048"] = _yolo_style_candidates(yolo, img_path, 2048, FLOOR_B2048)
+                raw["B2048"] = _yolo_style_candidates(yolo, src_img, 2048, FLOOR_B2048)
             if rtdetr is not None:
-                raw["C"] = _yolo_style_candidates(rtdetr, img_path, 1280, FLOOR_C)
+                raw["C"] = _yolo_style_candidates(rtdetr, src_img, 1280, FLOOR_C)
+            if HFLIP:
+                raw = {k: [(sc, np.ascontiguousarray(m[:, ::-1])) for sc, m in v] for k, v in raw.items()}
 
             gt = []
             for a in anns or []:
@@ -254,7 +262,7 @@ def calibrate(per_image_cache, sources, crossfit):
 
 
 def main():
-    global REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH, MASKRCNN_CKPT, YOLO_CKPT
+    global REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH, MASKRCNN_CKPT, YOLO_CKPT, HFLIP
     p = argparse.ArgumentParser()
     p.add_argument("--from-cache", action="store_true")
     p.add_argument("--sources", nargs="+", default=ALL_SOURCES,
@@ -266,7 +274,9 @@ def main():
     p.add_argument("--yolo", default=YOLO_CKPT, help="YOLO weights for the B1280/B2048 sources")
     p.add_argument("--cache", default=CACHE_PATH, help="val candidate cache path")
     p.add_argument("--test-cache", default=TEST_CACHE_PATH)
+    p.add_argument("--hflip", action="store_true", help="run detectors on the mirrored image (TTA source)")
     args = p.parse_args()
+    HFLIP = args.hflip
     REFINER_CKPT, CACHE_PATH, TEST_CACHE_PATH = args.refiner, args.cache, args.test_cache
     MASKRCNN_CKPT, YOLO_CKPT = args.maskrcnn, args.yolo
 
