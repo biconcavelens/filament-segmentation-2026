@@ -67,14 +67,17 @@ def main():
     p.add_argument("--pairs", choices=["default", "2way"], default="default",
                    help="2way: compare the 2-way iso config across --base-cache vs --cache")
     p.add_argument("--custom", nargs=4, metavar=("BASE_SOURCES", "BASE_ACCEPT", "CAND_SOURCES", "CAND_ACCEPT"),
-                   help="one iso-vs-iso pair, sources comma-separated, e.g. A,B1280 0.45 A,B1280,C 0.5")
+                   help="one iso-vs-iso pair, sources comma-separated, e.g. A,B1280 0.45 A,B1280,C 0.5; "
+                        "CAND_ACCEPT may be a comma list (one pair each)")
+    p.add_argument("--cand-scorer", choices=["iso", "gbm"], default="iso", help="scorer for the --custom candidate")
     args = p.parse_args()
     global PAIRS
     if args.pairs == "2way":
         PAIRS = [(TWO_WAY, TWO_WAY)]
     if args.custom:
         bs, ba, cs, ca = args.custom
-        PAIRS = [((tuple(bs.split(",")), "iso", float(ba)), (tuple(cs.split(",")), "iso", float(ca)))]
+        PAIRS = [((tuple(bs.split(",")), "iso", float(ba)), (tuple(cs.split(",")), args.cand_scorer, float(a)))
+                 for a in ca.split(",")]
     cache = pickle.load(open(args.cache, "rb"))
     base_cache = pickle.load(open(args.base_cache, "rb")) if args.base_cache else cache
     assert all(a[1] == b[1] for a, b in zip(cache, base_cache)), "caches must share val order/GT"
