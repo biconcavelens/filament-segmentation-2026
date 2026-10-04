@@ -1,0 +1,12 @@
+{
+  "id": "trishanthmellimi/filament-maskrcnn-aug",
+  "title": "filament-maskrcnn-aug",
+  "code_file": "train_aug.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["trishanthmellimi/filament-v10-refiner-rebuild"],
+  "competition_sources": ["filament-segmentation-2026"]
+}

@@ -30,6 +30,8 @@ def main():
     p.add_argument("--max-steps", type=int, default=0, help="stop each epoch early (smoke test)")
     p.add_argument("--tag", default="", help="checkpoint name suffix, e.g. _s2 for a second-seed run")
     p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--rot90", action="store_true", help="add transpose augmentation (full dihedral group)")
+    p.add_argument("--photometric", action="store_true", help="gamma/contrast/brightness jitter")
     p.add_argument("--backbone", help="ResNet-50 body weights from pretrain_ssl.py (FPN/RPN/heads stay COCO)")
     args = p.parse_args()
     lr = 0.005 * args.batch_size / 2  # the kernel used 0.005 at batch 2; linear scaling
@@ -40,7 +42,7 @@ def main():
     device = torch.device("cuda")
     train_entries, _, per_image = train_val_split(val_frac=0.1, seed=0)
     loader = torch.utils.data.DataLoader(
-        FilamentDataset(train_entries, per_image, augment=True),
+        FilamentDataset(train_entries, per_image, augment=True, rot90=args.rot90, photometric=args.photometric),
         batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn, num_workers=2)
 
     model = build_model(num_classes=2)

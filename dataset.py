@@ -124,8 +124,11 @@ def _random_tile_crop(img_arr, raw_masks, tile_size, prob=0.5):
 
 class FilamentDataset(torch.utils.data.Dataset):
     def __init__(self, entries: list[dict], per_image: dict, augment: bool = False,
-                 copy_paste: bool = False, tile_aug: bool = False, tile_size: int = 1152):
+                 copy_paste: bool = False, tile_aug: bool = False, tile_size: int = 1152,
+                 rot90: bool = False, photometric: bool = False):
         self.entries = entries
+        self.rot90 = rot90  # transpose -> with the two flips covers all 8 dihedral orientations
+        self.photometric = photometric  # GONG sites differ in exposure/contrast
         self.per_image = per_image
         self.augment = augment
         self.copy_paste = copy_paste
@@ -160,6 +163,14 @@ class FilamentDataset(torch.utils.data.Dataset):
             if random.random() < 0.5:
                 img_arr = np.ascontiguousarray(img_arr[::-1, :, :])
                 raw_masks = [np.ascontiguousarray(m[::-1, :]) for m in raw_masks]
+            if self.rot90 and random.random() < 0.5:
+                img_arr = np.ascontiguousarray(img_arr.transpose(1, 0, 2))
+                raw_masks = [np.ascontiguousarray(m.T) for m in raw_masks]
+            if self.photometric:
+                x = (img_arr.astype(np.float32) / 255.0) ** random.uniform(0.8, 1.25)
+                x = (x - 0.5) * random.uniform(0.8, 1.2) + 0.5 + random.uniform(-0.08, 0.08)
+                disk = img_arr > 8  # leave the black off-disk background untouched
+                img_arr = np.where(disk, np.clip(x, 0, 1) * 255, img_arr).astype(np.uint8)
 
         img = torch.from_numpy(img_arr).permute(2, 0, 1).float() / 255.0
 
