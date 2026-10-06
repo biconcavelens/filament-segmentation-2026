@@ -29,8 +29,14 @@ VAL_CACHE = "v10_all_val.pkl"  # only for the val entry order / GT
 
 
 def load_probs(probs_dir, stem):
-    z = np.load(Path(probs_dir) / f"{stem}.npz")
-    return z["fg"].astype(np.float32) / 255.0, z["spine"].astype(np.float32) / 255.0
+    """probs_dir may be a comma list of model output dirs: their maps are averaged."""
+    fg = sp = 0.0
+    dirs = str(probs_dir).split(",")
+    for d in dirs:
+        z = np.load(Path(d) / f"{stem}.npz")
+        fg = fg + z["fg"].astype(np.float32) / 255.0
+        sp = sp + z["spine"].astype(np.float32) / 255.0
+    return fg / len(dirs), sp / len(dirs)
 
 
 def instances(fg, sp, t_fg, t_sp, close_px, min_area, use_spine=True):
@@ -73,6 +79,7 @@ def main():
     p.add_argument("--min-area", type=int, nargs="+", default=[30, 100])
     p.add_argument("--score-floor", type=float, nargs="+", default=[0.0, 0.6, 0.7])
     p.add_argument("--export", type=float, nargs=4, metavar=("T_FG", "T_SP", "CLOSE", "MIN_AREA"))
+    p.add_argument("--key", default="S", help="source key / file tag for --export")
     args = p.parse_args()
     val_cache = pickle.load(open(VAL_CACHE, "rb"))
     _, val_entries, _ = train_val_split(val_frac=0.1, seed=0)
@@ -93,11 +100,12 @@ def main():
                     gtd = [{"size": [H, W], "counts": r.encode()} for r in gt]
                     lab = (mu.iou([{"size": [H, W], "counts": r.encode()} for _, r in cands], gtd, [0] * len(gtd))
                            .max(axis=1) > 0.5) if cands and gtd else np.zeros(len(cands), bool)
-                    out.append(({"S": [(s, r, int(l)) for (s, r), l in zip(cands, lab)]}, gt))
+                    out.append(({args.key: [(s, r, int(l)) for (s, r), l in zip(cands, lab)]}, gt))
                 else:
-                    out.append(({"S": [(s, r, 0) for s, r in cands]}, stem))
-            pickle.dump(out, open(f"semseg_{split}.pkl", "wb"))
-            print(f"wrote semseg_{split}.pkl ({len(out)} entries)", flush=True)
+                    out.append(({args.key: [(s, r, 0) for s, r in cands]}, stem))
+            name = f"semseg_{split}.pkl" if args.key == "S" else f"semseg_{args.key}_{split}.pkl"
+            pickle.dump(out, open(name, "wb"))
+            print(f"wrote {name} ({len(out)} entries)", flush=True)
         return
 
     configs = list(itertools.product(args.t_fg, args.t_sp, args.close, args.min_area))
