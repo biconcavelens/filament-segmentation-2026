@@ -122,10 +122,21 @@ def _random_tile_crop(img_arr, raw_masks, tile_size, prob=0.5):
     return crop_img, crop_masks
 
 
+def load_neighbor_map(manifest):
+    """download_neighbors.py manifest -> {training file_name: [paths of frames minutes before/after it]}."""
+    import csv
+    nb = {}
+    for r in csv.DictReader(open(manifest)):
+        nb.setdefault(r["source"], []).append(Path(manifest).parent / f"{r['stem']}.jpg")
+    return nb
+
+
 class FilamentDataset(torch.utils.data.Dataset):
     def __init__(self, entries: list[dict], per_image: dict, augment: bool = False,
                  copy_paste: bool = False, tile_aug: bool = False, tile_size: int = 1152,
-                 rot90: bool = False, photometric: bool = False):
+                 rot90: bool = False, photometric: bool = False, neighbors: dict | None = None,
+                 nb_p: float = 0.5):
+        self.neighbors, self.nb_p = neighbors or {}, nb_p  # neighbour frames keep the entry's labels
         self.entries = entries
         self.rot90 = rot90  # transpose -> with the two flips covers all 8 dihedral orientations
         self.photometric = photometric  # GONG sites differ in exposure/contrast
@@ -140,7 +151,10 @@ class FilamentDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         entry = self.entries[idx]
-        img_arr = np.array(Image.open(IMG_DIR / entry["file_name"]).convert("RGB"))
+        path = IMG_DIR / entry["file_name"]
+        if self.augment and self.neighbors.get(entry["file_name"]) and random.random() < self.nb_p:
+            path = random.choice(self.neighbors[entry["file_name"]])
+        img_arr = np.array(Image.open(path).convert("RGB"))
 
         anns = self.per_image.get(entry["id"], [])
         raw_masks = []

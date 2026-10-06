@@ -34,12 +34,26 @@ import torch.nn.functional as F
 DATA = Path("data/MAGFiLO_1.0_Kaggle_2026")
 ANN = DATA / "train" / "MAGFiLO_1.0_Annotations_kaggle2026_train.json"
 IMG_DIR, TEST_DIR = DATA / "train" / "train_images", DATA / "test" / "test_images"
-OUT = Path("semseg_local")
+OUT = Path(os.environ.get("SEMSEG_OUT", "semseg_local"))
 H = W = 2048
 CROP, BATCH, LR = 1024, 2, 2e-4  # laptop 8GB: half the Kaggle batch
 TRAIN_HOURS = float(os.environ.get("SEMSEG_HOURS", "5.5"))
 ENCODER = os.environ.get("SEMSEG_ENCODER", "tu-convnext_tiny")
-SEED = 2
+SEED = int(os.environ.get("SEMSEG_SEED", "2"))
+# Neighbouring GONG frames (download_neighbors.py): with probability NB_P a sample's image is replaced
+# by a frame a few minutes before/after it from the same site, keeping the sample's labels.
+NEIGHBORS = os.environ.get("SEMSEG_NEIGHBORS", "")  # manifest.csv path, empty = off
+NB_P = float(os.environ.get("SEMSEG_NB_P", "0.5"))
+
+
+def load_neighbors():
+    if not NEIGHBORS:
+        return {}
+    import csv
+    nb = {}
+    for r in csv.DictReader(open(NEIGHBORS)):
+        nb.setdefault(r["source"], []).append(Path(NEIGHBORS).parent / f"{r['stem']}.jpg")
+    return nb
 
 
 def load():
@@ -74,15 +88,18 @@ def render(anns):
 
 
 class Crops(torch.utils.data.Dataset):
-    def __init__(self, entries, per_image):
-        self.entries, self.per_image = entries, per_image
+    def __init__(self, entries, per_image, neighbors=None):
+        self.entries, self.per_image, self.neighbors = entries, per_image, neighbors or {}
 
     def __len__(self):
         return len(self.entries)
 
     def __getitem__(self, i):
         e = self.entries[i]
-        img = cv2.imread(str(IMG_DIR / e["file_name"]), cv2.IMREAD_GRAYSCALE)
+        path = IMG_DIR / e["file_name"]
+        if self.neighbors.get(e["file_name"]) and random.random() < NB_P:
+            path = random.choice(self.neighbors[e["file_name"]])
+        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
         anns = self.per_image.get(e["id"], [])
         fg, sp = render(anns)
         if anns and random.random() < 0.75:  # centre on a random filament most of the time
@@ -158,8 +175,11 @@ def main():
     torch.manual_seed(SEED)
     device = torch.device("cuda")
     train, val_files, per_image = load()
-    print(f"{len(train)} train entries, {len(val_files)} val images, encoder {ENCODER}", flush=True)
-    loader = torch.utils.data.DataLoader(Crops(train, per_image), batch_size=BATCH, shuffle=True,
+    neighbors = load_neighbors()
+    print(f"{len(train)} train entries, {len(val_files)} val images, encoder {ENCODER}, seed {SEED}, "
+          f"neighbour frames for {len(neighbors)} images (p={NB_P if neighbors else 0})", flush=True)
+    assert not set(neighbors) & set(val_files), "neighbour sources must be training images"
+    loader = torch.utils.data.DataLoader(Crops(train, per_image, neighbors), batch_size=BATCH, shuffle=True,
                                          num_workers=2, drop_last=True, persistent_workers=True)
     model = Net().to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
@@ -188,7 +208,7 @@ def main():
         epoch += 1
         print(f"epoch {epoch}: loss={run / max(n, 1):.4f} step={step} "
               f"elapsed={(time.time() - t0) / 3600:.2f}h", flush=True)
-    torch.save({"model": model.state_dict(), "encoder": ENCODER}, OUT / "semseg.pt")
+        torch.save({"model": model.state_dict(), "encoder": ENCODER}, OUT / "semseg.pt")  # every epoch
 
 
 def predict(device_name="cpu"):
@@ -199,7 +219,9 @@ def predict(device_name="cpu"):
     model.load_state_dict(torch.load(OUT / "semseg.pt", map_location=device)["model"])
     model.eval()
     (OUT / "probs").mkdir(exist_ok=True)
-    stems = [(IMG_DIR / f) for f in val_files] + sorted(TEST_DIR.iterdir())
+    stems = [(IMG_DIR / f) for f in val_files]
+    if os.environ.get("SEMSEG_PRED_TEST", "1") == "1":
+        stems += sorted(TEST_DIR.iterdir())
     for k, path in enumerate(stems, 1):
         if (OUT / "probs" / f"{path.stem}.npz").exists():
             continue  # resumable

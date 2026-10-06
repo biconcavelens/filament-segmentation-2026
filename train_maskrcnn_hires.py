@@ -16,7 +16,7 @@ import time
 
 import torch
 
-from dataset import FilamentDataset, collate_fn, train_val_split
+from dataset import FilamentDataset, collate_fn, load_neighbor_map, train_val_split
 from train import build_model, CKPT_DIR
 
 
@@ -33,6 +33,9 @@ def main():
     p.add_argument("--rot90", action="store_true", help="add transpose augmentation (full dihedral group)")
     p.add_argument("--photometric", action="store_true", help="gamma/contrast/brightness jitter")
     p.add_argument("--backbone", help="ResNet-50 body weights from pretrain_ssl.py (FPN/RPN/heads stay COCO)")
+    p.add_argument("--neighbors", help="download_neighbors.py manifest: train on frames minutes before/after "
+                                       "each training image with that image's labels")
+    p.add_argument("--nb-p", type=float, default=0.5, help="probability a sample uses a neighbour frame")
     args = p.parse_args()
     lr = 0.005 * args.batch_size / 2  # the kernel used 0.005 at batch 2; linear scaling
     name = f"maskrcnn_hires{args.min_size}" + ("_ssl" if args.backbone else "") + args.tag
@@ -40,9 +43,14 @@ def main():
         torch.manual_seed(args.seed)
 
     device = torch.device("cuda")
-    train_entries, _, per_image = train_val_split(val_frac=0.1, seed=0)
+    train_entries, val_entries, per_image = train_val_split(val_frac=0.1, seed=0)
+    neighbors = load_neighbor_map(args.neighbors) if args.neighbors else None
+    if neighbors:
+        assert not set(neighbors) & {e["file_name"] for e in val_entries}, "neighbour sources must be train images"
+        print(f"neighbour frames for {len(neighbors)} training images, p={args.nb_p}", flush=True)
     loader = torch.utils.data.DataLoader(
-        FilamentDataset(train_entries, per_image, augment=True, rot90=args.rot90, photometric=args.photometric),
+        FilamentDataset(train_entries, per_image, augment=True, rot90=args.rot90, photometric=args.photometric,
+                        neighbors=neighbors, nb_p=args.nb_p),
         batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn, num_workers=2)
 
     model = build_model(num_classes=2)

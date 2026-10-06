@@ -80,6 +80,7 @@ def main():
     p.add_argument("--score-floor", type=float, nargs="+", default=[0.0, 0.6, 0.7])
     p.add_argument("--export", type=float, nargs=4, metavar=("T_FG", "T_SP", "CLOSE", "MIN_AREA"))
     p.add_argument("--key", default="S", help="source key / file tag for --export")
+    p.add_argument("--splits", nargs="+", default=["val", "test"], help="--export only these splits")
     args = p.parse_args()
     val_cache = pickle.load(open(VAL_CACHE, "rb"))
     _, val_entries, _ = train_val_split(val_frac=0.1, seed=0)
@@ -90,6 +91,8 @@ def main():
         cache = {}
         for split, items in [("val", list(zip(stems, [gt for _, gt in val_cache]))),
                              ("test", [(pth.stem, None) for pth in sorted(TEST_DIR.iterdir())])]:
+            if split not in args.splits:
+                continue
             out, memo = [], {}
             for stem, gt in items:
                 if stem not in memo:
