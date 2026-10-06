@@ -38,6 +38,22 @@ ROWS = {  # name: (calibrated sources = voters, leaders, fusion config)
     "lightS": (DET + ["S"], DET + ["S"], CFG),
     "fullS": (VOTE12 + ["S"], DET + ["S"], CFG),
 }
+# ablations for the full-length paper (not in the main table)
+ROWS.update({
+    "voteS": (VOTE12 + ["S"], DET, CFG),                 # semantic model only votes
+    "lead12": (VOTE12, VOTE12, CFG),                     # 512 px / mirrored refinements may also lead
+    "lead12_nofuse": (VOTE12, VOTE12, NOFUSE),
+    "raw_base4": (DET, DET, NOFUSE),                     # no calibration: raw scores (see RAW)
+    **{f"lodo_{d}": ([s for s in DET if s != d], [s for s in DET if s != d], NOFUSE) for d in DET},
+    **{f"fullS_v{v}": (VOTE12 + ["S"], DET + ["S"], (0.5, 0.3, v)) for v in (0.1, 0.2, 0.4, 0.5, 0.6)},
+})
+RAW = {"raw_base4"}
+
+
+def raw_pooled(cache, sources):
+    """Uncalibrated: raw detector scores pooled as if comparable (ablation)."""
+    return [sorted([(float(s), r, k) for k in sources for s, r, _ in ps[k]], key=lambda x: -x[0])
+            for ps, _ in cache]
 
 
 def overlap_stats(pred, gt):
@@ -58,7 +74,8 @@ def compute(row):
     counts = np.zeros((len(SEEDS), len(cache), 4))
     ious, gdeg, pdeg = [], [], []
     for k, seed in enumerate(SEEDS):
-        for i, (pooled, (_, gt)) in enumerate(zip(calibrated(cache, sources, True, seed), cache)):
+        pooled_all = raw_pooled(cache, sources) if row in RAW else calibrated(cache, sources, True, seed)
+        for i, (pooled, (_, gt)) in enumerate(zip(pooled_all, cache)):
             kept = paint_panoptic_rle(fuse_image(pooled, [cfg], leaders)[cfg])
             counts[k, i] = official_counts(kept, gt)
             if k == 0:

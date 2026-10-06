@@ -53,9 +53,9 @@ def pipeline():
     box(ax, 5.5, 1.45, 1.4, 1.0, "Per-source\nisotonic\ncalibration\nP(TP | score)", "#f3e5f5")
     arrow(ax, 5.1, 1.95, 5.5, 1.95)
     arrow(ax, 3.15, 0.4, 5.5, 1.6)
-    box(ax, 7.3, 1.45, 1.25, 1.0, "Leaders:\ncross-source\nNMS (IoU 0.05)\naccept $\\geq$0.5", "#e3f2fd")
+    box(ax, 7.3, 1.45, 1.25, 1.0, "Detections:\ncross-source\nNMS (IoU 0.05)\naccept $\\geq$0.5", "#e3f2fd")
     arrow(ax, 6.9, 1.95, 7.3, 1.95)
-    box(ax, 7.3, 0.12, 1.25, 1.0, "Voters:\nall candidates\nIoU>0.5 with a\nleader, score $\\geq$0.3", "#e3f2fd")
+    box(ax, 7.3, 0.12, 1.25, 1.0, "Supporting masks:\nIoU>0.5 with a\ndetection,\nscore $\\geq$0.3", "#e3f2fd")
     arrow(ax, 6.9, 1.7, 7.3, 0.8)
     box(ax, 8.85, 0.85, 1.1, 1.2, "Weighted\npixel vote\n(share $\\geq$0.3)\n$\\to$ panoptic\npaint", "#fff8e1")
     arrow(ax, 8.55, 1.95, 8.85, 1.6)
@@ -86,7 +86,7 @@ def qualitative(idx):
     x0, x1 = max(xs.min() - pad, 0), min(xs.max() + pad, W)
     fig, axes = plt.subplots(1, 3, figsize=(7.0, 2.65))
     for ax, (title, rles, col) in zip(axes, [("Annotation", gt, "#00e676"), ("4-detector NMS baseline", base, "#ff9100"),
-                                            ("Final (fusion + semantic leader)", final, "#40c4ff")]):
+                                            ("Final pipeline", final, "#40c4ff")]):
         ax.imshow(img, cmap="gray", vmin=0, vmax=255)
         contours(ax, rles, col)
         ax.set_xlim(x0, x1)
@@ -159,8 +159,8 @@ def forest():
     (same bootstrap draws as paper_oof.py's summary)."""
     d = OUT.parent / "paper_oof"
     base = np.load(d / "base4.npz")["counts"]
-    rows = [("plainS", "+ semantic, no vote"), ("fuse4", "+ vote, 4 voters"), ("fuse12", "+ vote, 12 voters"),
-            ("lightS", "+ sem. leader, 5 voters"), ("fullS", "+ sem. leader, 13 voters")]
+    rows = [("plainS", "+ semantic, no mask vote"), ("fuse4", "+ mask vote, 4 sources"), ("fuse12", "+ mask vote, 12 sources"),
+            ("lightS", "+ semantic, 5 mask sources"), ("fullS", "+ semantic, 13 mask sources")]
     pq = lambda c: c[..., 0] / (c[..., 1] + 0.5 * c[..., 2] + 0.5 * c[..., 3])
     n = base.shape[1]
     boot = np.random.default_rng(0).integers(0, n, (2000, n))
