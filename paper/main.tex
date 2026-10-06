@@ -303,7 +303,7 @@ Averaging two semantic models & F & $-$.006 to $-$.003 (5 splits) \\
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{fig_qualitative.pdf}
-\caption{A validation image on which the mask vote helps (chosen as the image with the largest gain in matched filaments, so it is not a typical case). Left: the outlines of one annotator. Middle: the four detectors merge two filaments into one object and miss several faint ones. Right: the full system separates the two filaments and finds two more, but several faint annotated filaments are still missed.}
+\caption{A validation image on which the full system agrees well with the annotation (chosen among images with at least six annotated filaments as the one with the highest PQ for the full system, so it is a favorable case; the median image scores lower). Left: the outlines of one annotator. Middle: the four detectors find five of the seven filaments and miss the small one near the center and the one at the upper right. Right: the full system finds all seven.}
 \label{fig:qual}
 \end{figure*}
 

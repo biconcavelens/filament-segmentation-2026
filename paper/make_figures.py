@@ -94,8 +94,8 @@ def qualitative(idx):
         ax.set_title(f"{title} ({len(rles)})", fontsize=8)
         ax.axis("off")
     fig.subplots_adjust(left=0.005, right=0.995, bottom=0.01, top=0.9, wspace=0.03)
-    fig.savefig(OUT / "fig_qualitative.pdf", dpi=300)
-    fig.savefig(OUT / "fig_qualitative.png", dpi=200)
+    fig.savefig(OUT / "fig_qualitative.pdf", dpi=300, bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(OUT / "fig_qualitative.png", dpi=200, bbox_inches="tight", pad_inches=0.02)
     print("qualitative entry", idx, val_entries[idx]["file_name"], "gt", len(gt), "base", len(base), "final", len(final))
 
 
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     if what in ("all", "pipeline"):
         pipeline()
     if what in ("all", "qualitative"):
-        qualitative(83)
+        qualitative(37)
     if what in ("all", "calibration"):
         calibration()
     if what in ("all", "overlap"):
