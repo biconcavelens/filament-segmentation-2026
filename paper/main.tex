@@ -1,50 +1,35 @@
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
+\usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{array}
 \usepackage{amsmath}
 \usepackage{multirow}
+\usepackage{url}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage[hidelinks]{hyperref}
-\usepackage{xcolor}
 
 \begin{document}
 
-\title{Detect, Refine, Vote: Robustly Validated Instance Segmentation of Solar Filaments in GONG H$\alpha$ Images}
+\title{Detect, Refine, Vote: A Calibrated Ensemble for Instance Segmentation of Solar Filaments in GONG H$\alpha$ Images}
 
 % TODO(author): fill in affiliation and contact details before submission.
 \author{\IEEEauthorblockN{Trishanth Mellimi}
-\IEEEauthorblockA{\textit{[Department], [Institution]}\\
-[City], [Country] \\
-[email]}}
+\IEEEauthorblockA{\textit{Department, Institution}\\
+City, Country \\
+email@example.com}}
 
 \maketitle
 
 \begin{abstract}
-Solar filaments are the cores of many eruptions that drive space weather, yet segmenting them as individual instances in full-disk H$\alpha$ images remains hard: they are thin, faint at their ends, and annotators disagree about which ones to mark. We describe our solution to the IEEE BigData Cup 2026 Solar Filament Segmentation Challenge (MAGFiLO, panoptic quality). It is a detect--refine--vote pipeline: four instance detectors propose filaments, an ImageNet-pretrained crop refiner supervised with the dataset's filament spines draws each mask, per-source isotonic calibration and cross-source non-maximum suppression select detections, and a cluster-level weighted pixel vote over overlapping masks from all sources (including a native-resolution semantic U-Net whose spine-seeded instances act as extra detections) produces the final segmentation. Every design choice was accepted only if it improved out-of-fold panoptic quality on five random calibration splits with a paired bootstrap. The pipeline reaches PQ 0.40 on the public leaderboard without using any test annotations; the voting stage with semantic leaders adds +0.0115 PQ over the calibrated detector ensemble on held-out data, positive on all five splits. We also measure that two human annotators of the same image agree at only PQ 0.34, while our model scores 0.46 against a held-out annotator, which bounds the headroom left in this benchmark.
+Solar filaments are at the core of many eruptions that drive space weather, but segmenting them as individual instances in full-disk H$\alpha$ images is hard: they are thin, fade at their ends, and annotators disagree about which faint structures to mark. We describe our solution to the IEEE BigData Cup 2026 Solar Filament Segmentation Challenge (MAGFiLO data, panoptic quality metric). Four instance detectors propose filaments; an ImageNet-pretrained crop refiner, supervised with the dataset's filament spines, redraws each mask; per-source isotonic calibration and cross-source non-maximum suppression select detections; and a cluster-level, score-weighted pixel vote over all overlapping candidates produces each final mask. A native-resolution semantic U-Net contributes spine-seeded instances as additional detections and voters. The refiner, the vote and the semantic model were each kept only because they improved out-of-fold panoptic quality on each of five random calibration splits. On held-out validation images, voting with semantic leaders raises PQ from 0.450 to 0.461 over the calibrated detector ensemble (positive on all five splits); on the public leaderboard the pipeline scores 0.40 without using any test annotations. We also report the organizers' overlap statistics and show that two human annotators of the same image agree at PQ 0.31--0.34, below our model's agreement with a single held-out annotator.
 \end{abstract}
 
 \begin{IEEEkeywords}
-solar filaments, instance segmentation, panoptic quality, ensemble, H-alpha, space weather
+solar filaments, instance segmentation, panoptic quality, ensemble learning, H-alpha, space weather
 \end{IEEEkeywords}
-
-\section{Introduction}
-Filaments are dense, cool plasma suspended by magnetic fields above polarity inversion lines; they appear as dark, elongated features on the H$\alpha$ disk and are at the core of coronal mass ejections and solar flares. Automated, instance-level segmentation of filaments in the continuous full-disk H$\alpha$ stream of the Global Oscillation Network Group (GONG)~\cite{harvey1996gong} is therefore of direct interest to space-weather forecasting. The MAGFiLO dataset~\cite{ahmadzadeh2024magfilo} provides manually annotated filament polygons and spines for GONG images, and the IEEE BigData Cup 2026 challenge built on it asks for instance segmentations scored by panoptic quality (PQ)~\cite{kirillov2019panoptic}.
-
-Three properties make the task harder than generic instance segmentation: filaments are thin (often a few pixels wide in a $2048\times2048$ image) and fade gradually at their ends; neighbouring filaments touch or fragment; and the labels are noisy, since 42\% of training images were annotated by two or three people who often disagree on which structures are filaments. Prior deep-learning filament detectors combine object detection with semantic segmentation~\cite{diercke2024universal}; we follow the same two-stage idea but build it as a calibrated ensemble.
-
-Our contributions are: (i) a detect--refine--vote pipeline whose final stage replaces ``keep the best-scoring mask'' with a score-weighted pixel vote over all overlapping candidates, with detection (leader) and voting roles assigned separately; (ii) an evaluation protocol based on out-of-fold calibration and paired bootstrap over five random splits, which rejected most of the roughly 50 variants we tried, including several that looked better on a single split; and (iii) a quantitative account of where the remaining error lies, including the human inter-annotator agreement on the same metric.
-
-\section{Data and Evaluation Protocol}
-\textbf{Data.} The challenge training set contains 707 GONG H$\alpha$ images ($2048\times2048$, six observatories, 2011--2022) with 1,154 annotation sets (an image annotated by $k$ people appears $k$ times) and 8,199 filament polygons, each with a spine polyline. The test set has 180 images; the public leaderboard is computed on about half of them. We used only the challenge-provided annotations; no MAGFiLO test annotations were used at any point.
-
-\textbf{Split.} We hold out 10\% of the \emph{images} (70 images, 116 annotation sets, 908 filaments) for validation, so that no image appears on both sides through a second annotator. Each annotation set is scored separately, which matches the challenge's per-image ground truth.
-
-\textbf{Metric.} PQ $=\sum_{(y,\hat y)\in TP}\mathrm{IoU}(y,\hat y)\,/\,(|TP|+\frac12|FP|+\frac12|FN|)$ with matches at IoU $>0.5$, pooled over all images, implemented as in the organizers' self-evaluation notebook. We also report its factors, segmentation quality (SQ, mean IoU of matches) and recognition quality (RQ).
-
-\textbf{Robustness protocol.} The pipeline has calibration models and thresholds fitted on validation data, so in-sample scores are optimistic. For every comparison we (a) split the validation images into two folds, fit calibrators on one and score the other, (b) repeat for five random fold assignments, and (c) compute a 2,000-sample paired bootstrap of the per-image PQ difference. With 116 annotation sets the 95\% interval of a PQ difference is roughly $\pm0.01$; we kept a change only if it was positive on all five splits.
-
-\section{Method}
-Fig.~\ref{fig:pipeline} summarizes the pipeline.
 
 \begin{figure*}[t]
 \centering
@@ -53,110 +38,192 @@ Fig.~\ref{fig:pipeline} summarizes the pipeline.
 \label{fig:pipeline}
 \end{figure*}
 
+\section{Introduction}
+Filaments are dense, cool plasma held by magnetic fields above polarity inversion lines; they appear as dark, elongated features on the H$\alpha$ disk and are at the core of coronal mass ejections and flares. Instance-level segmentation of filaments in the continuous full-disk H$\alpha$ stream of the Global Oscillation Network Group (GONG)~\cite{harvey1996gong} is therefore useful for space-weather research. The MAGFiLO dataset~\cite{ahmadzadeh2024magfilo} provides manually annotated filament polygons and spines for GONG images, and the IEEE BigData Cup 2026 challenge built on it scores instance segmentations by panoptic quality (PQ)~\cite{kirillov2019panoptic}.
+
+Three properties make the task harder than generic instance segmentation: filaments are thin (a few pixels wide in a $2048\times2048$ image) and fade gradually at their ends; neighbouring filaments touch or fragment; and labels are noisy, since 42\% of the training images were annotated by two or three people who often disagree on which structures are filaments.
+
+\textbf{Related work.} Deep networks have been applied to filament segmentation in H$\alpha$ images by Ahmadzadeh et al.~\cite{ahmadzadeh2019toward}, Zhu et al.~\cite{zhu2019recognition} and Guo et al.~\cite{guo2022detection}; Diercke et al.~\cite{diercke2024universal} combine object detection with semantic segmentation in a semi-supervised setting. We follow the detect-then-segment idea but build it as a calibrated ensemble scored at the instance level, where detection, mask quality and the separation of touching filaments all enter the metric.
+
+\textbf{Contributions.} (i) A detect--refine--vote pipeline whose final stage replaces ``keep the best-scoring mask'' by a score-weighted pixel vote over overlapping candidates, with the roles of \emph{leader} (may create a detection) and \emph{voter} (only shapes a detection) assigned separately; this is what allows weak or redundant sources to help. (ii) An evaluation protocol with out-of-fold calibration and paired bootstrap on five random splits, under which most of the roughly 50 variants we tried were rejected (Table~\ref{tab:neg}). (iii) An analysis of the remaining error, including the organizers' overlap statistics and the agreement between human annotators on the same metric.
+
+\section{Data and Evaluation Protocol}
+\textbf{Data.} The challenge training set has 707 GONG H$\alpha$ images ($2048\times2048$ pixels, six observatories, 2011--2022) with 1,154 annotation sets (an image annotated by $k$ people appears $k$ times) and 8,199 filament polygons with spine polylines. The test set has 180 images; the public leaderboard uses about half of them. We used only the challenge's training annotations; no MAGFiLO test annotations were used.
+
+\textbf{Split and metric.} We hold out 10\% of the \emph{images} (70 images, 116 annotation sets, 908 filaments), so that no image is shared with training through a second annotator, and score each annotation set separately. PQ $=\sum_{TP}\mathrm{IoU}\,/\,(|TP|+\frac12|FP|+\frac12|FN|)$ with matches at IoU $>0.5$, pooled over all images, follows the organizers' self-evaluation notebook; we also report segmentation quality (SQ, mean IoU of matches) and recognition quality (RQ $=$ PQ/SQ).
+
+\textbf{Out-of-fold protocol.} Calibration models are fitted on validation candidates, so in-sample scores are optimistic. For every comparison we split the 70 validation images into two folds, fit calibrators on one and score the other, repeat this for five random fold assignments (the same five for all rows), and compute a 2,000-sample paired bootstrap over images of the PQ difference. These five splits share the same held-out images and the same trained models, so they are correlated: they control the calibration step, not training randomness or the choice of held-out images. Retraining one detector with another seed changed ensemble PQ by up to $\pm0.005$, which is the scale below which we do not interpret differences. Once this protocol was in place, we kept a change only if it improved PQ on all five splits.
+
+\section{Method}
+Fig.~\ref{fig:pipeline} summarizes the pipeline; code is available at \url{https://github.com/biconcavelens/filament-segmentation-2026}. % TODO(author): the repository must be public before submission.
+
+
+
 \subsection{Instance detectors}
-We train four detectors with different architectures and input scales: Mask R-CNN~\cite{he2017maskrcnn} (torchvision ResNet-50-FPN v2, COCO-initialized) at the native $2048$\,px resolution; YOLO11m-seg and YOLO11l-seg~\cite{jocher2024yolo11} at 1280\,px; and RT-DETR-l~\cite{zhao2024rtdetr} at 1280\,px. A recurring failure was that well-localized boxes received very low confidence, so we up-weighted the classification loss (3$\times$ for Mask R-CNN, \texttt{cls}$=1.5$ for YOLO, \texttt{cls}$=2.0$ for RT-DETR); for RT-DETR this raised the median score of well-localized boxes from 0.03 to 0.66. Running Mask R-CNN at native resolution instead of downscaling to 1333\,px improved the ensemble by +0.0035 PQ on all five splits.
+We train four detectors with different architectures and input scales: Mask R-CNN~\cite{he2017maskrcnn} (torchvision ResNet-50-FPN v2, COCO-initialized) at the native 2048\,px, YOLO11m-seg and YOLO11l-seg~\cite{jocher2024yolo11} at 1280\,px, and RT-DETR-l~\cite{zhao2024rtdetr} at 1280\,px. Well-localized boxes often received very low confidence, so we up-weighted the classification loss ($3\times$ for Mask R-CNN, \texttt{cls}$=1.5$ for YOLO, \texttt{cls}$=2.0$ for RT-DETR); for RT-DETR this raised the median score of boxes with IoU $>0.5$ from 0.03 to 0.66. Training Mask R-CNN at native resolution instead of 1333\,px added +0.0035 PQ to a two-detector ensemble (all five splits).
 
 \subsection{Crop refiner}
-Detector mask heads are coarse, so every proposal is re-segmented by a refiner: a square crop of $1.8\times$ the proposal's extent is resized to $256\times256$ (a second refiner uses $512\times512$) and passed to a U-Net~\cite{ronneberger2015unet} with an ImageNet-pretrained ResNet-34 encoder~\cite{he2016resnet,iakubovskii2019smp}. Besides the mask, the refiner predicts the annotated spine (centerline) as an auxiliary output, which steers features toward the filament's axis. It is trained on crops around ground-truth instances with BCE+Dice (weight 0.7) and spine BCE (0.3), and applied with four-view flip test-time augmentation. Replacing an equally-sized from-scratch U-Net by the pretrained encoder reduced validation loss from 0.103 to 0.092 and improved the full ensemble by +0.006 to +0.012 PQ on all five splits (mean +0.009), the largest gain of any single component.
+Detector mask heads are coarse, so every proposal is re-segmented by a refiner: a square crop of $1.8\times$ the proposal's extent is resized to $256\times256$ and passed to a U-Net~\cite{ronneberger2015unet} with an ImageNet-pretrained ResNet-34 encoder~\cite{he2016resnet,iakubovskii2019smp}. Besides the mask, the refiner predicts the annotated spine (centerline) as an auxiliary output. It is trained on crops around ground-truth instances with BCE$+$Dice (weight 0.7) and spine BCE (0.3), and applied with four-view flip test-time augmentation. Replacing a from-scratch U-Net of similar size by the pretrained encoder lowered validation loss from 0.103 to 0.092 and raised ensemble PQ by +0.006 to +0.012 on all five splits. A second refiner at $512\times512$ is used only as a voter.
 
 \subsection{Semantic model}
-Following a suggestion from the challenge forum that a well-trained segmentation network is competitive, we train a U-Net with an ImageNet ConvNeXt-Tiny encoder~\cite{liu2022convnext} at \emph{native} resolution on $1024\times1024$ crops, with focal~\cite{lin2017focal} plus Dice~\cite{milletari2016vnet} loss on the foreground and BCE plus Dice on a 5\,px rasterized spine, dihedral and on-disk photometric augmentation, AdamW and a cosine schedule (62 epochs, 3\,h on one GPU). Instances are obtained by thresholding the foreground at 0.5, using connected components of the spine map ($>0.3$) as watershed seeds to split touching filaments, and dropping regions under 100\,px; an instance's score is its mean foreground probability.
+A U-Net with an ImageNet ConvNeXt-Tiny encoder~\cite{liu2022convnext} is trained at native resolution on $1024\times1024$ crops, with focal~\cite{lin2017focal} plus Dice~\cite{milletari2016vnet} loss on the foreground and BCE plus Dice on a 5\,px rasterized spine (dihedral and on-disk photometric augmentation, AdamW, cosine schedule, 62 epochs in 3\,h on one Kaggle GPU). Instances are obtained by thresholding the foreground at 0.5, using connected components of the spine map ($>0.3$) as watershed seeds to split touching filaments, and dropping regions under 100\,px; an instance's score is its mean foreground probability.
 
-\subsection{Calibration, selection and cluster voting}
-Raw scores are not comparable across detectors, so each source's scores are mapped to $P(\mathrm{TP}\mid\text{score})$ by isotonic regression~\cite{zadrozny2002calibration} fitted on validation candidates (a candidate is a TP if its refined mask has IoU $>0.5$ with an annotated filament). Candidates from all leader sources are pooled, and a greedy NMS keeps those with calibrated score $\ge0.5$ that overlap no previously kept candidate by more than IoU 0.05; we call the survivors \emph{leaders}.
+\subsection{Calibration, leaders and cluster voting}
+Raw scores are not comparable across sources (Fig.~\ref{fig:calib}): a calibrated probability of 0.5 corresponds to a raw score of 0.38 for YOLO11m-seg but 0.65 for RT-DETR and 0.89 for Mask R-CNN. Each source's scores are therefore mapped to $P(\mathrm{TP}\mid\text{score})$ by isotonic regression~\cite{zadrozny2002calibration} fitted on validation candidates, where a candidate is a TP if its refined mask has IoU $>0.5$ with an annotated filament.
 
-Rather than keeping only each leader's own mask, we fuse it with the masks that describe the same filament, in the spirit of weighted box fusion~\cite{solovyev2021wbf}. Every non-leader candidate with calibrated score $\ge0.3$ joins the leader it overlaps most if that IoU exceeds 0.5. The leader's final mask contains the pixels whose score-weighted share of the cluster's masks is at least 0.3. Detection and voting roles are assigned separately. The leaders are the four detectors (refined at 256\,px) plus the semantic instances. The voters are the leaders plus the same four detectors refined at 512\,px and run on the horizontally mirrored image. Finally, masks are painted in score order onto an instance map so that predictions do not overlap (fragments under 20\,px are dropped).
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_calibration.pdf}
+\caption{Isotonic calibration of each source's raw score into $P(\mathrm{TP})$ on validation candidates. The dashed line marks the acceptance threshold used for leaders.}
+\label{fig:calib}
+\end{figure}
+
+Algorithm~\ref{alg:vote} gives the selection and voting step. Calibrated candidates of the leader sources are pooled, and a greedy NMS keeps those with $P\ge0.5$ that overlap no kept candidate by more than IoU 0.05; these are the leaders. Instead of keeping only each leader's own mask, we fuse it with the masks that describe the same filament, in the spirit of weighted box fusion~\cite{solovyev2021wbf}: every other candidate with $P\ge0.3$ joins the leader it overlaps most if that IoU exceeds 0.5, and the leader's final mask keeps the pixels whose score-weighted share of its cluster is at least 0.3. Leaders come from the four detectors (256\,px refiner) and the semantic instances; voters additionally include the four detectors refined at 512\,px and run on the horizontally mirrored image. Masks are finally painted in score order so that predictions do not overlap.
+
+\begin{algorithm}[t]
+\caption{Leader selection and cluster voting (per image)}
+\label{alg:vote}
+\begin{algorithmic}[1]
+\Require candidates $(m_i, p_i, s_i)$: mask, calibrated score, source; leader sources $\mathcal{L}$
+\State $L \gets \emptyset$
+\For{$i$ in order of decreasing $p_i$}
+  \If{$s_i\in\mathcal{L}$, $p_i\ge0.5$, $\mathrm{IoU}(m_i,m_j)\le0.05\ \forall j\in L$}
+    $L \gets L\cup\{i\}$
+  \EndIf
+\EndFor
+\State $C_\ell \gets \{\ell\}$ for each $\ell\in L$
+\For{each $j\notin L$ with $p_j\ge0.3$}
+  \State $\ell^\ast \gets \arg\max_{\ell\in L}\mathrm{IoU}(m_j,m_\ell)$
+  \If{$\mathrm{IoU}(m_j,m_{\ell^\ast})>0.5$} $C_{\ell^\ast}\gets C_{\ell^\ast}\cup\{j\}$ \EndIf
+\EndFor
+\For{each $\ell\in L$}
+  \State $\hat m_\ell(x) \gets \big[\sum_{k\in C_\ell}p_k m_k(x) \,/ \sum_{k\in C_\ell}p_k \ \ge 0.3\big]$
+\EndFor
+\State paint $\hat m_\ell$ in order of decreasing $p_\ell$ onto unclaimed pixels; drop fragments $<20$\,px
+\end{algorithmic}
+\end{algorithm}
+
+\begin{table}[t]
+\centering
+\caption{Training setup (each model on a single 16\,GB Kaggle GPU or an 8\,GB laptop RTX 4060).}
+\label{tab:train}
+\setlength{\tabcolsep}{2.5pt}
+\footnotesize
+\begin{tabular}{>{\raggedright\arraybackslash}p{1.75cm}>{\raggedright\arraybackslash}p{1.75cm}>{\raggedright\arraybackslash}p{4.6cm}}
+\toprule
+Model & Init., input & Training \\
+\midrule
+Mask R-CNN & COCO, 2048 & SGD lr $2.5{\times}10^{-3}$, 6 epochs, batch 1, cls.\ loss $\times3$, flips \\
+YOLO11m-seg & COCO, 1280 & 40 epochs, batch 4, \texttt{cls}$=1.5$ \\
+YOLO11l-seg & COCO, 1280 & 103 epochs (time budget), \texttt{cls}$=1.5$ \\
+RT-DETR-l & COCO, 1280 & 60 epochs, batch 2, \texttt{cls}$=2.0$ \\
+Crop refiner & ImageNet R34, 256 crop & Adam $3{\times}10^{-4}$, cosine, 15 epochs, batch 16, rot./flip/brightness \\
+Semantic U-Net & ImageNet ConvNeXt-T, 1024 crop & AdamW $3{\times}10^{-4}$, cosine, 62 epochs (3\,h), batch 4, dihedral + photometric \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Experiments}
 
 \begin{table}[t]
 \centering
-\caption{Validation results (calibration fitted on the full validation split). $\Delta$ OOF: out-of-fold PQ change versus the 4-detector baseline, range over five random calibration splits (all positive).}
+\caption{Validation results, out of fold: mean PQ (standard deviation) over five random calibration splits, SQ and RQ, and the PQ change versus the calibrated 4-detector ensemble (range over splits; number of splits whose 95\% bootstrap interval excludes zero). Rows starting with + modify the 4-detector ensemble. Last column: public leaderboard.}
 \label{tab:main}
-\setlength{\tabcolsep}{3.2pt}
-\begin{tabular}{lcccc}
+\setlength{\tabcolsep}{1.9pt}
+\footnotesize
+\begin{tabular}{lccccc}
 \toprule
-Configuration & PQ & SQ & RQ & $\Delta$ OOF \\
+Configuration & PQ & SQ & RQ & $\Delta$PQ range (sig.) & Pub. \\
 \midrule
-Mask R-CNN (2048 px) & .432 & .682 & .633 & \\
-YOLO11m-seg & .437 & .685 & .638 & \\
-RT-DETR-l & .439 & .686 & .639 & \\
-YOLO11l-seg & .427 & .686 & .621 & \\
-Semantic U-Net (instances) & .406 & .667 & .608 & \\
+Mask R-CNN & .429 (.004) & .682 & .629 &  &  \\
+YOLO11m-seg & .437 (.002) & .684 & .639 &  &  \\
+RT-DETR-l & .436 (.002) & .686 & .636 &  &  \\
+YOLO11l-seg & .420 (.004) & .687 & .611 &  &  \\
+Semantic U-Net & .396 (.003) & .669 & .591 &  &  \\
 \midrule
-4 detectors, calibrated NMS & .456 & .682 & .668 & --- \\
-+ cluster vote, 4 voters & .460 & .682 & .675 & +.003\,/\,+.004 \\
-+ cluster vote, 12 voters & .462 & .684 & .676 & +.005\,/\,+.009 \\
-+ semantic leader, 5 voters & .461 & .680 & .678 & +.001\,/\,+.009 \\
-+ semantic leader, 13 voters & \textbf{.468} & .683 & \textbf{.685} & +.007\,/\,+.016 \\
+4 detectors + NMS & .450 (.003) & .682 & .660 & -- & .40 \\
++ semantic, no vote & .448 (.001) & .678 & .661 & [$-$.006, $+$.003] (0/5) &  \\
++ vote, 4 voters & .453 (.003) & .682 & .664 & [$+$.003, $+$.004] (0/5) & .40 \\
++ vote, 12 voters & .457 (.002) & .684 & .668 & [$+$.005, $+$.009] (3/5) & .40 \\
++ sem. leader, 5 voters & .455 (.001) & .680 & .668 & [$+$.001, $+$.009] (0/5) &  \\
++ sem. leader, 13 voters & \textbf{.461} (.002) & .683 & .675 & [$+$.007, $+$.016] (3/5) & .40 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Main results.} Table~\ref{tab:main} lists single sources and the stages of the pipeline. Each detector alone reaches PQ 0.43--0.44; the calibrated ensemble of four reaches 0.456, mainly through recognition (RQ 0.668 vs.\ $\le$0.639). Cluster voting improves SQ and converts near misses into matches, and the semantic instances, which find filaments the detectors miss, add recall once their rough shapes are cleaned up by the vote (matched filaments rise from 570 to 603 of 908). The full configuration improves on the 4-detector baseline by +0.007 to +0.016 PQ out of fold (mean +0.0115). On the public leaderboard the 4-detector baseline and all voting variants score 0.40; with $\sim$90 public images and two-decimal reporting, differences of this size are not resolvable there, and our validation scores run about 0.05 above the public ones for every configuration.
+\textbf{Main results.} Table~\ref{tab:main} lists single sources and pipeline stages. Each detector alone reaches PQ 0.42--0.44; the calibrated ensemble of four reaches 0.450, mainly through recognition (higher RQ at equal SQ). Adding the semantic instances as plain detections does not help ($-0.001$ on average, $-0.006$ to $+0.003$ over splits), but when they and the extra refinements only vote, or lead through the vote, PQ rises to 0.461 and matched filaments increase from 568 to 600 of 908 (means over splits). The final configuration improves on the baseline on all five splits, and its 95\% bootstrap interval excludes zero on three of them; with 70 validation images this is consistent but modest evidence. On the public leaderboard, a single Mask R-CNN scored 0.27, adding the crop refiner 0.34, the calibrated two-detector ensemble 0.39, and the pretrained refiner 0.40; all voting variants also score 0.40. With about 90 public images and two-decimal reporting, gains of $<0.01$ are not resolvable there, and our validation scores run about 0.05 above the public ones for every configuration.
 
-\textbf{What did not help.} Table~\ref{tab:neg} lists the main rejected alternatives. Two patterns recur. First, adding \emph{detections} from additional correlated sources (a second-seed Mask R-CNN, mirrored-image proposals, the semantic instances without voting) adds near-duplicate false positives faster than true positives; the same sources help when they only vote. Second, learned rescoring with richer features improves candidate-level ranking but not PQ, and lowering the acceptance threshold does not pay off.
+\textbf{Overlap statistics.} The organizers additionally evaluate the distributions of IoU and Dice over all overlapping prediction--annotation pairs and the one-to-many and many-to-one relations, computed as in their self-evaluation notebook (Fig.~\ref{fig:overlap}). For the final pipeline the mean IoU over overlapping pairs is 0.614 versus 0.608 for the 4-detector ensemble (mean Dice 0.744 vs.\ 0.739). Annotated filaments with no overlapping prediction fall from 212 to 181 of 908, at the cost of more predictions without any overlapping annotation (126 vs.\ 104). Fragmentation and merging are rare for both: 19 vs.\ 15 annotated filaments overlap two or more predictions (one-to-many) and 14 vs.\ 16 predictions overlap two or more annotations (many-to-one).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_overlap.pdf}
+\caption{Organizers' overlap statistics on validation (one out-of-fold split). Left: IoU of every overlapping prediction--annotation pair. Right: number of annotated filaments (GT) and predictions overlapped by 0, 1, or $\ge2$ partners; ``GT 2+'' is fragmentation (one-to-many), ``pred 2+'' merging (many-to-one).}
+\label{fig:overlap}
+\end{figure}
+
+\textbf{Where the error is.} For the 4-detector ensemble (one calibration split), 325 of 908 validation filaments are missed. For 219 of them a correct mask exists among the candidates but its calibrated score is below the acceptance threshold (median 0.33); 67 have no correct candidate (57 of these have a near miss at IoU 0.3--0.5, typically a mask truncated before the filament's faint tail); 39 lose to an overlapping wrong candidate. Lowering the threshold does not pay off: leaders scored 0.3--0.5 are true positives at most 32\% of the time even when nine or more sources agree, below the $\approx$0.34 rate at which accepting a detection increases PQ.
+
+\textbf{Human agreement.} On the 296 training images annotated by two or more people, scoring one annotator against another with the challenge metric gives PQ 0.340 (SQ 0.634, RQ 0.536). On the 33 validation images with several annotators the human--human PQ is 0.309, while our model scores 0.456 (the 4-detector ensemble 0.447) out of fold against the same annotation sets. Trained on all annotators, the model approximates their consensus and agrees with any single annotator better than annotators agree with each other; much of the remaining ``error'' is disagreement about which faint structures are filaments and where their tails end.
 
 \begin{table}[t]
 \centering
-\caption{Rejected alternatives (validation PQ; OOF ranges over five splits where available).}
+\caption{Rejected alternatives. Context: the system the change was tested in (Y = YOLO11m-seg alone; E = 4-detector ensemble with the earlier from-scratch refiner; F = 4-detector ensemble with the pretrained refiner, with or without voting). PQ on validation; OOF ranges over five splits where marked.}
 \label{tab:neg}
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{p{4.9cm}p{2.9cm}}
+\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{>{\raggedright\arraybackslash}p{4.25cm}c>{\raggedright\arraybackslash}p{2.85cm}}
 \toprule
-Alternative & Effect \\
+Alternative & Ctx. & Effect on PQ \\
 \midrule
-Mask2Former (Swin-T), frozen or unfrozen encoder & solo $\le$.345; lowers ensemble \\
-SAM ViT-B, box-prompted decoder fine-tune & .316 \\
-SimSiam pretraining on 4k unlabeled GONG images & tie; public .38 \\
-Self-training on pseudo-labeled test images & .417 $\rightarrow$ .393 \\
-CLAHE contrast enhancement & .425 $\rightarrow$ .412--.419 \\
-Gradient-boosted rescorer (agreement, shape) & $-$.014 to $-$.004 \\
-Mask growing into U-Net foreground & helps weak refiner, $-$.006 with pretrained one \\
-Mirrored-image proposals as detections & $-$.009 to $+$.003 \\
-Second-seed or augmented Mask R-CNN & $-$.005 to $+$.003 \\
-Two semantic models averaged & $-$.006 to $-$.003 \\
+Mask2Former (Swin-T), frozen or fine-tuned encoder & E & solo $\le$.345; lowers E \\
+SAM ViT-B decoder, box prompts & -- & solo .316 \\
+SimSiam pretraining of the Mask R-CNN backbone on 4k unlabeled GONG images & E & tie (.448 vs .449); public .38 \\
+Self-training on pseudo-labeled test images & Y & .417 $\rightarrow$ .393 \\
+CLAHE contrast enhancement & Y & .425 $\rightarrow$ .412--.419 \\
+Gradient-boosted rescorer (agreement, shape features) & F & $-$.014 to $-$.004 (OOF) \\
+Growing masks into U-Net foreground & E / F & $+$.002 / $-$.006 \\
+Mirrored-image proposals as detections & F & $-$.009 to $+$.003 (OOF) \\
+Second-seed or augmented Mask R-CNN & F & $-$.005 to $+$.003 (OOF) \\
+Two semantic models averaged & F & $-$.006 to $-$.003 (OOF) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Where the error is.} For the 4-detector baseline, 325 of 908 validation filaments are missed. For 219 of them a correct mask exists in the candidate pool but its calibrated score is below the acceptance threshold (median 0.33); 67 have no correct candidate (57 of these have a near miss at IoU 0.3--0.5, typically a mask truncated before the filament's faint tail); 39 were suppressed by an overlapping wrong candidate. Lowering the threshold does not help: leaders scored 0.3--0.5 are true positives at most 32\% of the time even when nine or more sources agree, below the $\approx$0.34 rate at which accepting a detection increases PQ.
-
-\textbf{Human agreement.} On the 296 training images annotated by two or more people, scoring one annotator against another with the challenge metric gives PQ 0.340 (SQ 0.634, RQ 0.536), and 0.309 on the 33 validation images with multiple annotators. Our model scores 0.456--0.468 against a held-out annotator, i.e., it agrees with a single annotator better than annotators agree with each other: trained on all annotators, it learns their consensus. Much of the remaining ``error'' is therefore disagreement about which faint structures are filaments and where their tails end, which bounds what any method can gain on this metric.
+\textbf{What did not help.} Table~\ref{tab:neg} lists the main rejected alternatives. Two patterns recur. Adding \emph{detections} from further correlated sources (a second-seed Mask R-CNN, mirrored-image proposals, the semantic instances without voting) adds near-duplicate false positives faster than true positives, while the same sources help as voters. Learned rescoring with richer features improved candidate-level ranking but not PQ.
 
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{fig_qualitative.pdf}
-\caption{Validation example where voting helps (chosen as the image with the largest gain in matched filaments). Left: one annotator's filaments. Middle: the 4-detector baseline merges two filaments into one instance and misses several faint ones. Right: the final pipeline separates the pair and recovers two more; several faint annotated filaments remain undetected.}
+\caption{Validation example where voting helps (chosen as the image with the largest gain in matched filaments, not as a typical case). Left: one annotator's filaments. Middle: the 4-detector ensemble merges two filaments into one instance and misses several faint ones. Right: the final pipeline separates the pair and recovers two more; several faint annotated filaments remain undetected.}
 \label{fig:qual}
 \end{figure*}
 
 \section{Discussion}
-\textbf{Validation discipline.} Most variants we tried looked better on one split and failed out of fold, and several one-split ``wins'' also failed on the leaderboard. Requiring a positive change on every random calibration split, rather than optimizing a single score, was what separated real gains (pretrained refiner, cluster voting, semantic leaders) from noise.
+\textbf{Cost.} Refinement dominates inference time. Per validation image the four detectors produce about 93 candidates above their score floors (13, 20, 41 and 19), each refined with four-view TTA; on a 16\,GB Kaggle GPU the Mask R-CNN source including its refinement takes 1.9--2.2\,s per image and the semantic U-Net 1.2\,s per image (2048\,px, four-view TTA). The full configuration refines every candidate three times (256\,px, 512\,px, mirrored image). A light configuration that keeps the semantic leader but uses only the five leader sources as voters retains about 45\% of the gain (+0.005 PQ) at about a third of the refinement cost.
 
-\textbf{Cost.} The full configuration runs each detector twice (original and mirrored image), the crop refiner three times per proposal, and the semantic U-Net once. A light configuration that keeps the semantic leader but only the five leader sources as voters retains about 40\% of the gain (+0.005 PQ out of fold) at substantially lower inference cost.
-
-\textbf{Limitations.} Fine-scale barbs are still largely missed: the refiner works at 256--512\,px per crop and the semantic model at native resolution, but neither is trained to emphasize barbs, which are thin and inconsistently annotated. The 0.05 gap between validation and public scores is consistent across configurations and is also reported by other participants; we have not identified its cause.
+\textbf{Limitations.} The thresholds (acceptance 0.5, NMS 0.05) and fusion parameters were chosen on the same 70 validation images we report on; for the fusion parameters the in-sample PQ varies by only 0.001 over a 27-point grid, so this selection effect is small, but the other choices may be optimistic. The models were trained once on one split, so the five splits do not capture training variance. Fine-scale barbs are still largely missed: neither the refiner nor the semantic model is trained to emphasize them, and they are inconsistently annotated. The 0.05 gap between validation and public scores is consistent across configurations; we have not identified its cause.
 
 \section{Conclusion}
-A carefully calibrated ensemble of standard detectors, a pretrained spine-supervised crop refiner, and a cluster-level pixel vote that separates detection from voting roles yields robust, if incremental, gains in PQ for solar filament segmentation, reaching 0.40 on the public leaderboard without test-label leakage. The measured human inter-annotator agreement (PQ 0.34) suggests that progress on this benchmark should be judged with out-of-fold protocols and distributional measures rather than leaderboard differences of a few thousandths.
+A calibrated ensemble of standard detectors, a pretrained spine-supervised crop refiner, and a cluster-level pixel vote that separates leaders from voters yields consistent, if modest, out-of-fold gains for solar filament segmentation and reaches PQ 0.40 on the public leaderboard without test-label leakage. That human annotators agree with each other at PQ 0.31--0.34 suggests evaluating progress on this benchmark with out-of-fold protocols and distributional measures rather than leaderboard differences of a few thousandths.
 
-% TODO(author): IEEE requires disclosing AI-generated content; adjust to describe how AI tools were actually used.
+% TODO(author): IEEE requires disclosure of AI-generated content; make this describe how AI tools were actually used.
 \section*{Acknowledgment}
-We thank the organizers of the IEEE BigData Cup 2026 Solar Filament Segmentation Challenge and the MAGFiLO team for the data. AI-based coding assistants were used for implementing and running experiments and for drafting text; all design decisions, results, and claims were reviewed by the author.
+We thank the organizers of the IEEE BigData Cup 2026 Solar Filament Segmentation Challenge and the MAGFiLO team for the data. AI coding assistants were used to implement and run experiments and to draft text; all design decisions, results and claims were reviewed by the author.
 
-\bibliographystyle{IEEEtran}
 \begin{thebibliography}{99}
 \bibitem{harvey1996gong} J.~W. Harvey \emph{et al.}, ``The Global Oscillation Network Group (GONG) project,'' \emph{Science}, vol.~272, no.~5266, pp.~1284--1286, 1996.
-\bibitem{ahmadzadeh2024magfilo} A.~Ahmadzadeh \emph{et al.}, ``A dataset of manually annotated filaments from H-alpha observations,'' \emph{Scientific Data}, vol.~11, art.~1031, 2024, doi: 10.1038/s41597-024-03876-y.
+\bibitem{ahmadzadeh2024magfilo} A.~Ahmadzadeh \emph{et al.}, ``A dataset of manually annotated filaments from H-alpha observations,'' \emph{Scientific Data}, vol.~11, art.~1031, 2024.
 \bibitem{kirillov2019panoptic} A.~Kirillov, K.~He, R.~Girshick, C.~Rother, and P.~Doll\'ar, ``Panoptic segmentation,'' in \emph{Proc. CVPR}, 2019, pp.~9404--9413.
-\bibitem{diercke2024universal} A.~Diercke \emph{et al.}, ``A universal method for solar filament detection from H$\alpha$ observations using semi-supervised deep learning,'' \emph{Astron. Astrophys.}, vol.~686, art.~A213, 2024, doi: 10.1051/0004-6361/202348314.
+\bibitem{ahmadzadeh2019toward} A.~Ahmadzadeh, S.~S. Mahajan, D.~J. Kempton, R.~A. Angryk, and S.~Ji, ``Toward filament segmentation using deep neural networks,'' in \emph{Proc. IEEE Int. Conf. Big Data}, 2019, pp.~4932--4941.
+\bibitem{zhu2019recognition} G.~Zhu, G.~Lin, D.~Wang, S.~Liu, and X.~Yang, ``Solar filament recognition based on deep learning,'' \emph{Solar Physics}, vol.~294, art.~117, 2019.
+\bibitem{guo2022detection} X.~Guo, Y.~Yang, S.~Feng, X.~Bai, B.~Liang, and W.~Dai, ``Solar-filament detection and classification based on deep learning,'' \emph{Solar Physics}, vol.~297, art.~104, 2022.
+\bibitem{diercke2024universal} A.~Diercke \emph{et al.}, ``A universal method for solar filament detection from H$\alpha$ observations using semi-supervised deep learning,'' \emph{Astron. Astrophys.}, vol.~686, art.~A213, 2024.
 \bibitem{he2017maskrcnn} K.~He, G.~Gkioxari, P.~Doll\'ar, and R.~Girshick, ``Mask R-CNN,'' in \emph{Proc. ICCV}, 2017, pp.~2961--2969.
-\bibitem{jocher2024yolo11} G.~Jocher and J.~Qiu, ``Ultralytics YOLO11,'' 2024. [Online]. Available: https://github.com/ultralytics/ultralytics
+\bibitem{jocher2024yolo11} G.~Jocher and J.~Qiu, ``Ultralytics YOLO11,'' 2024. [Online]. Available: \url{https://github.com/ultralytics/ultralytics}
 \bibitem{zhao2024rtdetr} Y.~Zhao \emph{et al.}, ``DETRs beat YOLOs on real-time object detection,'' in \emph{Proc. CVPR}, 2024, pp.~16965--16974.
 \bibitem{ronneberger2015unet} O.~Ronneberger, P.~Fischer, and T.~Brox, ``U-Net: Convolutional networks for biomedical image segmentation,'' in \emph{Proc. MICCAI}, 2015, pp.~234--241.
 \bibitem{he2016resnet} K.~He, X.~Zhang, S.~Ren, and J.~Sun, ``Deep residual learning for image recognition,'' in \emph{Proc. CVPR}, 2016, pp.~770--778.
-\bibitem{iakubovskii2019smp} P.~Iakubovskii, ``Segmentation Models Pytorch,'' 2019. [Online]. Available: https://github.com/qubvel/segmentation\_models.pytorch
+\bibitem{iakubovskii2019smp} P.~Iakubovskii, ``Segmentation Models Pytorch,'' 2019. [Online]. Available: \url{https://github.com/qubvel/segmentation_models.pytorch}
 \bibitem{liu2022convnext} Z.~Liu, H.~Mao, C.-Y. Wu, C.~Feichtenhofer, T.~Darrell, and S.~Xie, ``A ConvNet for the 2020s,'' in \emph{Proc. CVPR}, 2022, pp.~11976--11986.
 \bibitem{lin2017focal} T.-Y. Lin, P.~Goyal, R.~Girshick, K.~He, and P.~Doll\'ar, ``Focal loss for dense object detection,'' in \emph{Proc. ICCV}, 2017, pp.~2980--2988.
 \bibitem{milletari2016vnet} F.~Milletari, N.~Navab, and S.-A. Ahmadi, ``V-Net: Fully convolutional neural networks for volumetric medical image segmentation,'' in \emph{Proc. 3DV}, 2016, pp.~565--571.

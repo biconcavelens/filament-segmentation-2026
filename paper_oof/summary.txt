@@ -1,0 +1,29 @@
+row         PQ mean (sd)     SQ     RQ     TP  delta vs base4: mean [min,max] (#seeds with 95% CI > 0)
+solo_A   0.4287 (0.0043) 0.6819 0.6287  481.4  -0.0209 [-0.0244,-0.0164] (0/5)
+solo_B   0.4373 (0.0023) 0.6838 0.6394  508.2  -0.0123 [-0.0170,-0.0072] (0/5)
+solo_C   0.4363 (0.0022) 0.6863 0.6357  489.0  -0.0133 [-0.0198,-0.0099] (0/5)
+solo_L   0.4197 (0.0042) 0.6871 0.6108  472.6  -0.0300 [-0.0378,-0.0243] (0/5)
+solo_S   0.3956 (0.0027) 0.6688 0.5915  463.0  -0.0540 [-0.0578,-0.0487] (0/5)
+base4    0.4496 (0.0027) 0.6816 0.6596  568.4
+plainS   0.4483 (0.0012) 0.6783 0.6609  588.4  -0.0013 [-0.0058,+0.0030] (0/5)
+fuse4    0.4529 (0.0026) 0.6817 0.6643  572.4  +0.0033 [+0.0026,+0.0039] (0/5)
+fuse12   0.4567 (0.0019) 0.6836 0.6681  575.6  +0.0071 [+0.0047,+0.0087] (3/5)
+lightS   0.4547 (0.0013) 0.6804 0.6682  594.6  +0.0051 [+0.0014,+0.0086] (0/5)
+fullS    0.4611 (0.0017) 0.6828 0.6753  600.0  +0.0115 [+0.0069,+0.0164] (3/5)
+Mask R-CNN (2048\,px) & .429 (.004) & .682 & .629 &  &  \\
+YOLO11m-seg (1280\,px) & .437 (.002) & .684 & .639 &  &  \\
+RT-DETR-l (1280\,px) & .436 (.002) & .686 & .636 &  &  \\
+YOLO11l-seg (1280\,px) & .420 (.004) & .687 & .611 &  &  \\
+Semantic U-Net instances & .396 (.003) & .669 & .591 &  &  \\
+4 detectors, calibrated NMS & .450 (.003) & .682 & .660 & -- & .40 \\
++ semantic, plain NMS & .448 (.001) & .678 & .661 & [$-$.006, $+$.003] (0/5) &  \\
++ cluster vote (4 voters) & .453 (.003) & .682 & .664 & [$+$.003, $+$.004] (0/5) & .40 \\
++ cluster vote (12 voters) & .457 (.002) & .684 & .668 & [$+$.005, $+$.009] (3/5) & .40 \\
++ semantic leader (5 voters) & .455 (.001) & .680 & .668 & [$+$.001, $+$.009] (0/5) &  \\
++ semantic leader (13 voters) & .461 (.002) & .683 & .675 & [$+$.007, $+$.016] (3/5) & .40 \\
+
+Organizers' descriptive statistics (seed 1):
+base4: overlapping pairs 712, mean IoU 0.608, mean Dice 0.739, matched (IoU>0.5) pairs median IoU 0.687 | GT degree 0/1/2+: 212/681/15 | pred degree 0/1/2+: 104/679/16
+fullS: overlapping pairs 747, mean IoU 0.614, mean Dice 0.744, matched (IoU>0.5) pairs median IoU 0.692 | GT degree 0/1/2+: 181/708/19 | pred degree 0/1/2+: 126/719/14
+base4 on the 33 multi-annotator val images (79 annotation sets): OOF PQ 0.4469
+fullS on the 33 multi-annotator val images (79 annotation sets): OOF PQ 0.4555

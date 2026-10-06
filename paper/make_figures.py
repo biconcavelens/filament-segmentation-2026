@@ -99,6 +99,68 @@ def qualitative(idx):
     print("qualitative entry", idx, val_entries[idx]["file_name"], "gt", len(gt), "base", len(base), "final", len(final))
 
 
+def calibration():
+    """Isotonic P(TP | raw score) per source (fit on all validation candidates)."""
+    from sklearn.isotonic import IsotonicRegression
+    cache = pickle.load(open(OUT.parent / "paper_val.pkl", "rb"))
+    names = {"Av": "Mask R-CNN", "B1280v": "YOLO11m-seg", "Cv": "RT-DETR-l", "L1280v": "YOLO11l-seg",
+             "S": "Semantic U-Net"}
+    fig, ax = plt.subplots(figsize=(3.45, 2.1))
+    xs = np.linspace(0, 1, 201)
+    for (key, name), col in zip(names.items(), ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b"]):
+        sc = np.array([s for ps, _ in cache for s, _, _ in ps[key]])
+        lab = np.array([l for ps, _ in cache for _, _, l in ps[key]])
+        iso = IsotonicRegression(y_min=0, y_max=1, out_of_bounds="clip").fit(sc, lab)
+        ax.plot(xs, iso.predict(xs), color=col, lw=1.3, label=name)
+    ax.axhline(0.5, color="#888", lw=0.7, ls="--")
+    ax.set_xlabel("raw detector score", fontsize=8)
+    ax.set_ylabel("calibrated P(TP)", fontsize=8)
+    ax.tick_params(labelsize=7)
+    ax.legend(fontsize=6.5, frameon=False, loc="upper left")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    fig.tight_layout(pad=0.2)
+    fig.savefig(OUT / "fig_calibration.pdf")
+    fig.savefig(OUT / "fig_calibration.png", dpi=200)
+
+
+def overlap_figure():
+    """Organizers' descriptive statistics (seed-1 out-of-fold run): IoU of every overlapping
+    (prediction, annotation) pair, and per-annotation / per-prediction numbers of overlapping partners."""
+    d = {r: np.load(OUT.parent / "paper_oof" / f"{r}.npz") for r in ["base4", "fullS"]}
+    lab = {"base4": "4-detector NMS", "fullS": "final"}
+    col = {"base4": "#ff9100", "fullS": "#1e88e5"}
+    fig, (a, b) = plt.subplots(1, 2, figsize=(3.45, 1.75), gridspec_kw={"width_ratios": [1.15, 1]})
+    bins = np.linspace(0, 1, 21)
+    for r in d:
+        a.hist(d[r]["ious"], bins=bins, histtype="step", lw=1.2, color=col[r], label=lab[r])
+    a.axvline(0.5, color="#888", lw=0.7, ls="--")
+    a.set_xlabel("IoU of overlapping pairs", fontsize=7)
+    a.set_ylabel("pairs", fontsize=7)
+    a.tick_params(labelsize=6)
+    a.legend(fontsize=5.5, frameon=False, loc="upper left")
+    groups = ["GT 0", "GT 1", "GT 2+", "pred 0", "pred 1", "pred 2+"]
+    x = np.arange(len(groups))
+    for k, r in enumerate(d):
+        g, p = d[r]["gdeg"], d[r]["pdeg"]
+        vals = [(g == 0).sum(), (g == 1).sum(), (g >= 2).sum(), (p == 0).sum(), (p == 1).sum(), (p >= 2).sum()]
+        b.bar(x + (k - 0.5) * 0.38, vals, width=0.38, color=col[r])
+    b.set_xticks(x)
+    b.set_xticklabels(groups, fontsize=5.5, rotation=40)
+    b.set_ylabel("count", fontsize=7)
+    b.tick_params(axis="y", labelsize=6)
+    fig.tight_layout(pad=0.2)
+    fig.savefig(OUT / "fig_overlap.pdf")
+    fig.savefig(OUT / "fig_overlap.png", dpi=200)
+
+
 if __name__ == "__main__":
-    pipeline()
-    qualitative(int(sys.argv[1]) if len(sys.argv) > 1 else 3)
+    what = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if what in ("all", "pipeline"):
+        pipeline()
+    if what in ("all", "qualitative"):
+        qualitative(83)
+    if what in ("all", "calibration"):
+        calibration()
+    if what in ("all", "overlap"):
+        overlap_figure()
