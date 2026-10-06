@@ -6,7 +6,28 @@ features) in GONG H-alpha full-disk observations, for the
 Scored by Panoptic Quality (PQ): `PQ = sum(IoU over matches) / (TP + 0.5*FP + 0.5*FN)`,
 match = IoU > 0.5.
 
-## Current best: PQ 0.39 (real leaderboard)
+## Paper
+
+T. Mellimi, R. Bhargava, R. Gupta, "Instance Segmentation of Solar Filaments in GONG H-alpha Images
+with a Calibrated Ensemble of Detectors", submitted to SABiD 2026 (IEEE BigData 2026 workshop).
+Source and PDF: [`paper/`](paper/). Final system: public leaderboard 0.40, out-of-fold validation PQ 0.461.
+
+Code for the final system and the paper's numbers:
+
+| What | Script |
+|---|---|
+| Detectors (Mask R-CNN 2048, YOLO11m/l-seg 1280, RT-DETR-l 1280) | `kaggle_kernel_maskrcnn_cls/`, `kaggle_kernel_train_cls/`, `kaggle_kernel_yolo11l/`, `kaggle_kernel_rtdetr_cls/` |
+| Crop refiner (smp U-Net, ResNet34, 256 px crops, spine head) | `train_refiner.py` |
+| Semantic ConvNeXt-Tiny U-Net and its instances | `train_semseg_local.py`, `sweep_semseg.py` |
+| Calibration, detection selection, mask vote, submission | `sweep_mask_fusion.py` (`--predict`) |
+| Out-of-fold tables, ablations, bootstrap | `paper_oof.py` |
+| Thin structures / near misses, errors by size | `paper_thin.py`, `paper_size.py` |
+| Annotator agreement | `diag_human_pq.py` |
+| Figures | `paper/make_figures.py` |
+
+The rest of this README is the development log, kept as written.
+
+## Earlier pipeline: PQ 0.39 (real leaderboard)
 
 Cross-architecture ensemble with calibrated confidence and explicit
 cross-detector dedup (`predict_ensemble_dedup.py`):
