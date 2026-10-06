@@ -186,10 +186,33 @@ def forest():
     fig.savefig(OUT / "fig_forest.png", dpi=200)
 
 
+def vote_threshold():
+    """Out-of-fold PQ of the full system against the vote-share threshold (mean and sd over 5 splits)."""
+    d = OUT.parent / "paper_oof"
+    pq = lambda c: c[..., 0] / (c[..., 1] + 0.5 * c[..., 2] + 0.5 * c[..., 3])
+    ts = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    vals = [pq(np.load(d / ("fullS.npz" if t == 0.3 else f"fullS_v{t}.npz"))["counts"].sum(1)) for t in ts]
+    base = pq(np.load(d / "base4.npz")["counts"].sum(1)).mean()
+    fig, ax = plt.subplots(figsize=(3.45, 1.9))
+    ax.errorbar(ts, [v.mean() for v in vals], yerr=[v.std(ddof=1) for v in vals], fmt="o-", ms=3, lw=1.2,
+                color="#1e88e5", capsize=2, label="full system")
+    ax.axhline(base, color="#ff9100", lw=1, ls="--", label="4 detectors, no vote")
+    ax.set_xlabel("vote threshold (share of score-weighted masks)", fontsize=7)
+    ax.set_ylabel("PQ", fontsize=7)
+    ax.tick_params(labelsize=6.5)
+    ax.legend(fontsize=6.5, frameon=False, loc="lower right")
+    fig.tight_layout(pad=0.2)
+    fig.savefig(OUT / "fig_threshold.pdf")
+    fig.savefig(OUT / "fig_threshold.png", dpi=200)
+    print({t: round(float(v.mean()), 4) for t, v in zip(ts, vals)})
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
     if what == "forest":
         forest()
+    if what == "threshold":
+        vote_threshold()
     if what in ("all", "pipeline"):
         pipeline()
     if what in ("all", "qualitative"):

@@ -165,6 +165,46 @@ Table~\ref{tab:main} and Fig.~\ref{fig:forest} show the results of the individua
 
 On the public leaderboard, a single Mask R-CNN scored 0.27, adding the crop refiner raised this to 0.34, a calibrated combination of two detectors to 0.39, and the pretrained refiner to 0.40. All later versions also scored 0.40. The public score is computed on about 90 images and shown with two decimals, so differences below 0.01 cannot be seen there. Our validation scores were about 0.05 higher than the public scores for every version we submitted.
 
+\subsection{Ablations}
+Table~\ref{tab:abl} removes or changes one part of the system at a time, with the same five calibration splits as above. Pooling the raw scores of the four detectors without calibration lowers PQ from 0.450 to 0.428. More filaments are matched (625 against 568), but many more false detections are accepted, because a single threshold cannot suit models whose scores mean different things. Leaving out any one of the four detectors costs at most 0.002, and leaving out YOLO11l-seg costs nothing measurable, so no single detector is essential and the gain of the combination comes from their overlap.
+
+The lower part of the table varies which sources may create detections. The semantic model helps only when it may create detections: as a source of masks alone it leaves PQ at the level of the 12-source vote (0.457), while as a source of both it raises PQ to 0.461. The opposite holds for the 512-pixel refiner and the mirrored images. When their candidates may also create detections, PQ drops from 0.457 to 0.453 with the vote and to 0.448 without it, since they mostly add second copies of filaments that are already detected.
+
+Fig.~\ref{fig:threshold} shows the effect of the vote threshold, the share of the score-weighted masks a pixel needs in order to be kept. Values between 0.3 and 0.5 give nearly the same PQ (0.460 to 0.461), and 0.6 is only slightly lower (0.457). Below 0.3 the masks become too large and SQ falls (0.678 at 0.2 against 0.683 at 0.3), and at 0.1 PQ drops to 0.433, below the four detectors without the vote.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_threshold.pdf}
+\caption{PQ of the full system as a function of the vote threshold (mean and standard deviation over the five calibration splits). The dashed line is the four calibrated detectors without the vote.}
+\label{fig:threshold}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Ablations (PQ, mean over five calibration splits, and change relative to the four calibrated detectors).}
+\label{tab:abl}
+\setlength{\tabcolsep}{3pt}
+\footnotesize
+\begin{tabular}{lcc}
+\toprule
+Configuration & PQ & $\Delta$ \\
+\midrule
+4 detectors, calibrated scores & .450 & -- \\
+4 detectors, raw scores & .428 & $-$.021 \\
+without Mask R-CNN & .448 & $-$.002 \\
+without YOLO11m-seg & .448 & $-$.002 \\
+without RT-DETR-l & .448 & $-$.001 \\
+without YOLO11l-seg & .450 & $-$.000 \\
+\midrule
+Vote, 12 mask sources, detections from 4 detectors & .457 & $+$.007 \\
+\quad semantic model adds masks only & .457 & $+$.007 \\
+\quad semantic model adds detections and masks & \textbf{.461} & $+$.012 \\
+\quad 512\,px and mirrored candidates also detect & .453 & $+$.003 \\
+\quad the same without the vote & .448 & $-$.002 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \subsection{Thin structures and near misses}
 The organizers name fine structures such as barbs, the thin offshoots along the side of a filament, as one of the main difficulties of the task. Barbs are not labeled separately in MAGFiLO, so we approximated them by the thin parts of each annotated filament. These are the pixels removed by a morphological opening with a disk of radius 2 pixels, that is, parts narrower than about 5 pixels. They include barbs and the narrow ends of filaments and make up 1.9\% of the annotated pixels. Table~\ref{tab:thin} reports how many of these thin pixels, and of the remaining core pixels, are covered by the predictions.
 
