@@ -1,0 +1,11 @@
+{
+  "id": "trishanthmellimi/filament-semseg3-tiny-long",
+  "title": "filament-semseg3-tiny-long",
+  "code_file": "train_semseg.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "competition_sources": ["filament-segmentation-2026"]
+}
