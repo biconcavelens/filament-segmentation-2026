@@ -52,7 +52,7 @@ Filaments are dense, cool plasma suspended by magnetic fields above polarity inv
 
 The MAGFiLO dataset~\cite{ahmadzadeh2024magfilo} provides hand-drawn outlines and spines (center lines) of filaments in GONG images, and the IEEE BigData Cup 2026 Solar Filament Segmentation Challenge~\cite{ahmadzadeh2026challenge} uses it to evaluate instance segmentation with panoptic quality (PQ)~\cite{kirillov2019panoptic}. Under this metric every filament must be found and outlined as a separate object. Three properties of the data make this hard. Filaments are thin, often only a few pixels wide in a $2048\times2048$ image, and they fade gradually toward their ends. Neighboring filaments touch or break into pieces. And 42\% of the training images were annotated by two or three people, who often disagree about which faint structures are filaments and where they end.
 
-Earlier work has applied deep networks to filament segmentation in H$\alpha$ images~\cite{ahmadzadeh2019toward,zhu2019recognition,guo2022detection}, and Diercke et al.~\cite{diercke2024universal} combined an object detector with a segmentation network in a semi-supervised setting. Our system also detects filaments first and segments them afterwards, but it combines several detectors and a semantic segmentation model, since in our experiments no single model came close to the combination.
+Earlier work has applied deep networks to filament segmentation in H$\alpha$ images~\cite{ahmadzadeh2019toward,zhu2019recognition,guo2022detection}, and Diercke et al.~\cite{diercke2024universal} combined an object detector with a segmentation network in a semi-supervised setting. On MAGFiLO, Solomon et al.~\cite{solomon2025edgeattnet} guided the attention of a U-Net with a learned edge map to segment barbs, which matter for determining the chirality of a filament. We look at how well our system covers such thin structures in Section~\ref{sec:thin}. Outside solar physics, combining the outputs of several detectors is common in object detection, for example by averaging the boxes of overlapping detections~\cite{solovyev2021wbf}. Our system also detects filaments first and segments them afterwards, but it combines several detectors and a semantic segmentation model, since in our experiments no single model came close to the combination.
 
 Below we describe the final system and the experiments that shaped it, including the many alternatives that did not help, and look at the errors that remain. Section~\ref{sec:data} covers the data and the evaluation procedure, Section~\ref{sec:system} the system, Section~\ref{sec:results} the results, and Section~\ref{sec:discussion} practical aspects and limitations.
 
@@ -215,6 +215,7 @@ Vote, 12 mask sources, detections from 4 detectors & .457 & $+$.007 \\
 \end{table}
 
 \subsection{Thin structures and near misses}
+\label{sec:thin}
 The organizers name fine structures such as barbs, the thin offshoots along the side of a filament, as one of the main difficulties of the task. Barbs are not labeled separately in MAGFiLO, so we approximated them by the thin parts of each annotated filament. These are the pixels removed by a morphological opening with a disk of radius 2 pixels, that is, parts narrower than about 5 pixels. They include barbs and the narrow ends of filaments and make up 1.9\% of the annotated pixels. Table~\ref{tab:thin} reports how many of these thin pixels, and of the remaining core pixels, are covered by the predictions.
 
 \begin{table}[t]
@@ -238,7 +239,14 @@ Semantic U-Net alone & .356 & .569 & .498 & .845 & 462 & -- \\
 \end{tabular}
 \end{table}
 
-For the four detectors, 44\% of the thin pixels of detected filaments are covered, against 81\% of the core pixels. Running the refiner at $512\times512$ instead of $256\times256$ hardly changes this (44.5\%). The mask vote raises thin coverage to 49\% and core coverage to 84\% without lowering SQ. So the gain does not come from simply making the masks larger. In an earlier version of the system, enlarging all masks by one pixel lowered PQ from 0.446 to 0.419. The same pattern appears when thin parts are defined with a radius of 3 pixels (coverage 0.58 for the four detectors and 0.63 for the full system). The vote by itself does not create detections. With 12 mask sources it turns 13 of the 96 near misses of the four detectors into matches and loses 4 earlier matches. The 30 additional filaments found by the full system all come from the semantic model; the four detectors had no prediction overlapping them with IoU above 0.3. The semantic model also draws the thin parts of the filaments it finds as completely as the full vote (50\%), although on its own it finds far fewer filaments.
+For the four detectors, 44\% of the thin pixels of detected filaments are covered, against 81\% of the core pixels. Running the refiner at $512\times512$ instead of $256\times256$ hardly changes this (44.5\%). The mask vote raises thin coverage to 49\% and core coverage to 84\% without lowering SQ. So the gain does not come from simply making the masks larger. In an earlier version of the system, enlarging all masks by one pixel lowered PQ from 0.446 to 0.419. The same pattern appears when thin parts are defined with a radius of 3 pixels (coverage 0.58 for the four detectors and 0.63 for the full system). The vote by itself does not create detections. With 12 mask sources it turns 13 of the 96 near misses of the four detectors into matches and loses 4 earlier matches. The 30 additional filaments found by the full system all come from the semantic model; the four detectors had no prediction overlapping them with IoU above 0.3. The semantic model also draws the thin parts of the filaments it finds as completely as the full vote (50\%), although on its own it finds far fewer filaments. Fig.~\ref{fig:qual} shows an image on which the full system separates two filaments that the four detectors merge and finds two more.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_qualitative.pdf}
+\caption{A validation image on which the mask vote helps (chosen as the image with the largest gain in matched filaments, so it is not a typical case). Left: the outlines of one annotator. Middle: the four detectors merge two filaments into one object and miss several faint ones. Right: the full system separates the two filaments and finds two more, but several faint annotated filaments are still missed.}
+\label{fig:qual}
+\end{figure*}
 
 \subsection{Organizers' overlap statistics}
 The challenge also evaluates the distribution of IoU and Dice over all overlapping pairs of predictions and annotations and the frequency of one-to-many and many-to-one overlaps, computed as in the organizers' evaluation notebook (Fig.~\ref{fig:overlap}). The mean IoU over overlapping pairs is 0.614 for the full system and 0.608 for the four detectors (mean Dice 0.744 and 0.739). The number of annotated filaments with no overlapping prediction falls from 212 to 181 of 908, while the number of predictions that overlap no annotation rises from 104 to 126. Fragmentation and merging are rare in both cases: 19 and 15 annotated filaments overlap two or more predictions, and 14 and 16 predictions overlap two or more annotations.
@@ -252,6 +260,25 @@ The challenge also evaluates the distribution of IoU and Dice over all overlappi
 
 \subsection{Remaining errors}
 On one calibration split, the four detectors miss 325 of the 908 validation filaments. For 219 of them, one of the candidates does match the filament, but its calibrated score is below the acceptance threshold (median 0.33). For 67 there is no matching candidate at all, and 57 of these have a candidate with IoU between 0.3 and 0.5, typically a mask that stops before the faint end of the filament. The remaining 39 lose out to an overlapping candidate that is wrong. Lowering the acceptance threshold does not help. Candidates with scores between 0.3 and 0.5 are correct at most 32\% of the time, even when nine or more sources agree on them. A detection has to be correct about 34\% of the time to increase PQ.
+
+\subsection{Errors by filament size}
+Fig.~\ref{fig:size} splits the 908 validation filaments into four groups of equal size by annotated area, again on one calibration split. The full system finds 52\% of the smallest filaments (below 644 pixels) and 76\% of those between 1,241 and 2,526 pixels. For the largest quarter the share drops again, to 68\%. The two ends fail in different ways. Of the 110 small filaments that the full system misses, 86 have no overlapping prediction at all, so they were simply not detected. Of the 72 missed large filaments, only 20 have no overlapping prediction, and for 38 the best prediction reaches an IoU between 0.3 and 0.5. Here the prediction and the annotation clearly describe the same filament but disagree about its extent, the same kind of disagreement we find between two annotators (Section~\ref{sec:annot}). Small predictions are also the least reliable: 56\% of the predictions below 644 pixels match an annotation, against 78\% of those above 2,526 pixels. The mask quality of matched filaments hardly depends on size (SQ between 0.68 and 0.70 in all four groups). The full system finds more filaments than the four detectors in every group, most clearly between 644 and 1,241 pixels (69\% against 62\%).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_size.pdf}
+\caption{Results by annotated filament area on one calibration split (quartiles of the 908 validation filaments). Left: fraction of annotated filaments found (IoU above 0.5). Right: filaments missed by the full system, split into those with no overlapping prediction and those with a partly overlapping one.}
+\label{fig:size}
+\end{figure}
+
+Fig.~\ref{fig:failure} shows both kinds of error on the validation image with the lowest PQ (0.21) among the images with at least ten annotated filaments. Three of the six unmatched predictions lie on annotated filaments but overlap them with an IoU between 0.30 and 0.48, so each of them counts once as a false positive and once as a missed filament. The other six missed filaments have no overlapping prediction, and several of them lie next to bright active regions.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.9\textwidth]{fig_failure.pdf}
+\caption{A validation image on which the full system does poorly (chosen as the image with the lowest PQ among those with at least ten annotated filaments). Left: annotated filaments that the full system finds (green) and misses (red). Right: predictions that match an annotation (blue) and predictions that do not (orange).}
+\label{fig:failure}
+\end{figure*}
 
 \begin{table}[t]
 \centering
@@ -281,6 +308,7 @@ Udaipur & 21 & 168 & 8.0 & .434 & .441 & $+$.008 \\
 Table~\ref{tab:site} breaks down the results by observatory and by period. PQ of the four detectors ranges from 0.41 for Big Bear to 0.49 for Learmonth, and the full system gains most at the two sites where the four detectors do worst. Images taken near the solar minimum contain few filaments (3.1 per annotation set, against 9.0 near the maximum) and have the lowest scores, but there are only 8 such annotation sets.
 
 \subsection{Agreement between annotators}
+\label{sec:annot}
 For the 296 training images annotated by two or more people, we scored each annotator's outlines against another annotator's with the challenge metric. The resulting PQ is 0.340 (SQ 0.634, RQ 0.536). For the 33 validation images with several annotators the value is 0.309, while our system scores 0.456 against the same annotation sets (0.447 for the four detectors). Because the models are trained on the outlines of all annotators, their output is closer to an average of the annotators than any single annotator is to another. A large part of what PQ counts as error is thus disagreement among annotators about faint structures and filament ends, which limits how high a score any method can reach on this data.
 
 \subsection{Alternatives that did not help}
@@ -309,16 +337,12 @@ Averaging two semantic models & F & $-$.006 to $-$.003 (5 splits) \\
 \end{tabular}
 \end{table}
 
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{fig_qualitative.pdf}
-\caption{A validation image on which the mask vote helps (chosen as the image with the largest gain in matched filaments, so it is not a typical case). Left: the outlines of one annotator. Middle: the four detectors merge two filaments into one object and miss several faint ones. Right: the full system separates the two filaments and finds two more, but several faint annotated filaments are still missed.}
-\label{fig:qual}
-\end{figure*}
 
 \section{Discussion}
 \label{sec:discussion}
 \textbf{Run time.} Most of the inference time goes into redrawing candidates. On average the four detectors produce 93 candidates per validation image above their minimum scores (13, 20, 41 and 19), and each is redrawn with four flipped views. On a 16\,GB Kaggle GPU, Mask R-CNN together with the redrawing of its candidates takes 1.9 to 2.2\,s per image, and the semantic model 1.2\,s per image at full resolution with four flipped views. The full system redraws every candidate three times (256-pixel crops, 512-pixel crops and the mirrored image). A lighter version that uses only the five detection sources in the vote keeps about 45\% of the improvement (0.005 PQ) at about a third of the redrawing cost. For processing the full GONG archive, that version may be the better choice.
+
+\textbf{Lessons for similar applications.} Some of what we learned should carry over to other segmentation tasks that combine several models and have noisy labels. Scores from different models have to be calibrated before they are compared: pooling the raw scores lowered PQ by 0.021 (Table~\ref{tab:abl}). A model that works differently from the others helped more than further models of the same kind. The semantic model contributed all 30 filaments that no detector had found, while a second Mask R-CNN and proposals from mirrored images did not help (Table~\ref{tab:neg}). Small improvements could not be judged on the public leaderboard, where every version after the first few scored 0.40, so our decisions rested on repeated held-out splits and paired resampling. Measuring the agreement between annotators early is also worthwhile. Here it showed that two annotators agree less with each other than the system agrees with them, so a large part of the remaining error cannot be removed by a better model alone.
 
 \textbf{Limitations.} The acceptance and suppression thresholds and the vote parameters were chosen on the same 70 validation images on which we report results. For the vote parameters this matters little, since PQ changed by only 0.001 over a grid of 27 settings, but the other settings may be slightly optimistic. All models were trained once on one split, so our evaluation does not capture the variation from retraining. Thin structures remain the weakest point: even the full system covers only about half of the thin pixels of the filaments it finds, against 84\% of the core. Neither the refiner nor the semantic model is trained to give thin structures extra weight, and barbs are also drawn inconsistently by the annotators. The 0.05 gap between our validation and public scores was stable across versions, and we have not found its cause.
 
@@ -340,6 +364,8 @@ We thank the organizers of the IEEE BigData Cup 2026 Solar Filament Segmentation
 \bibitem{zhu2019recognition} G.~Zhu, G.~Lin, D.~Wang, S.~Liu, and X.~Yang, ``Solar filament recognition based on deep learning,'' \emph{Solar Physics}, vol.~294, art.~117, 2019.
 \bibitem{guo2022detection} X.~Guo, Y.~Yang, S.~Feng, X.~Bai, B.~Liang, and W.~Dai, ``Solar-filament detection and classification based on deep learning,'' \emph{Solar Physics}, vol.~297, art.~104, 2022.
 \bibitem{diercke2024universal} A.~Diercke \emph{et al.}, ``A universal method for solar filament detection from H$\alpha$ observations using semi-supervised deep learning,'' \emph{Astron. Astrophys.}, vol.~686, art.~A213, 2024.
+\bibitem{solomon2025edgeattnet} V.~Solomon, P.~Martens, J.~Liu, and R.~Angryk, ``EdgeAttNet: Towards barb-aware filament segmentation,'' arXiv:2509.02964, 2025.
+\bibitem{solovyev2021wbf} R.~Solovyev, W.~Wang, and T.~Gabruseva, ``Weighted boxes fusion: Ensembling boxes from different object detection models,'' \emph{Image Vis. Comput.}, vol.~107, art.~104117, 2021.
 \bibitem{he2017maskrcnn} K.~He, G.~Gkioxari, P.~Doll\'ar, and R.~Girshick, ``Mask R-CNN,'' in \emph{Proc. ICCV}, 2017, pp.~2961--2969.
 \bibitem{jocher2024yolo11} G.~Jocher and J.~Qiu, ``Ultralytics YOLO11,'' 2024. [Online]. Available: \url{https://github.com/ultralytics/ultralytics}
 \bibitem{zhao2024rtdetr} Y.~Zhao \emph{et al.}, ``DETRs beat YOLOs on real-time object detection,'' in \emph{Proc. CVPR}, 2024, pp.~16965--16974.
@@ -350,7 +376,6 @@ We thank the organizers of the IEEE BigData Cup 2026 Solar Filament Segmentation
 \bibitem{lin2017focal} T.-Y. Lin, P.~Goyal, R.~Girshick, K.~He, and P.~Doll\'ar, ``Focal loss for dense object detection,'' in \emph{Proc. ICCV}, 2017, pp.~2980--2988.
 \bibitem{milletari2016vnet} F.~Milletari, N.~Navab, and S.-A. Ahmadi, ``V-Net: Fully convolutional neural networks for volumetric medical image segmentation,'' in \emph{Proc. 3DV}, 2016, pp.~565--571.
 \bibitem{zadrozny2002calibration} B.~Zadrozny and C.~Elkan, ``Transforming classifier scores into accurate multiclass probability estimates,'' in \emph{Proc. KDD}, 2002, pp.~694--699.
-\bibitem{solovyev2021wbf} R.~Solovyev, W.~Wang, and T.~Gabruseva, ``Weighted boxes fusion: Ensembling boxes from different object detection models,'' \emph{Image Vis. Comput.}, vol.~107, art.~104117, 2021.
 \end{thebibliography}
 
 \end{document}

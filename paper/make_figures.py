@@ -207,8 +207,86 @@ def vote_threshold():
     print({t: round(float(v.mean()), 4) for t, v in zip(ts, vals)})
 
 
+def failure(idx):
+    """A poor validation image: annotations colored matched/missed, full-system predictions correct/false."""
+    cache = pickle.load(open(OUT.parent / "paper_val.pkl", "rb"))
+    _, val_entries, _ = train_val_split(val_frac=0.1, seed=0)
+    pooled = calibrated(cache, VOTE, crossfit=False)[idx]
+    final = paint_panoptic_rle(fuse_image(pooled, [(0.5, 0.3, 0.3)], DET + ["S"])[(0.5, 0.3, 0.3)])
+    gt = cache[idx][1]
+    enc = lambda rs: [{"size": [H, W], "counts": r.encode()} for r in rs]
+    iou = mu.iou(enc(final), enc(gt), [0] * len(gt)) if final else np.zeros((0, len(gt)))
+    gt_hit = iou.max(0) > 0.5 if len(final) else np.zeros(len(gt), bool)
+    pr_hit = iou.max(1) > 0.5
+    img = np.array(Image.open(IMG_DIR / val_entries[idx]["file_name"]).convert("L"))
+    ys, xs = np.where(sum(mu.decode(r) for r in enc(gt + final)) > 0)
+    pad = 60
+    y0, y1 = max(ys.min() - pad, 0), min(ys.max() + pad, H)
+    x0, x1 = max(xs.min() - pad, 0), min(xs.max() + pad, W)
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 3.3))
+    panels = [(f"Annotation: {gt_hit.sum()} found, {(~gt_hit).sum()} missed",
+               [(np.array(gt)[gt_hit], "#00e676"), (np.array(gt)[~gt_hit], "#ff1744")]),
+              (f"Full system: {pr_hit.sum()} correct, {(~pr_hit).sum()} false",
+               [(np.array(final)[pr_hit], "#40c4ff"), (np.array(final)[~pr_hit], "#ff9100")])]
+    for ax, (title, groups) in zip(axes, panels):
+        ax.imshow(img, cmap="gray", vmin=0, vmax=255)
+        for rles, col in groups:
+            contours(ax, list(rles), col)
+        ax.set_xlim(x0, x1)
+        ax.set_ylim(y1, y0)
+        ax.set_title(title, fontsize=8)
+        ax.axis("off")
+    fig.subplots_adjust(left=0.005, right=0.995, bottom=0.01, top=0.92, wspace=0.03)
+    fig.savefig(OUT / "fig_failure.pdf", dpi=300, bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(OUT / "fig_failure.png", dpi=200, bbox_inches="tight", pad_inches=0.02)
+    print("failure entry", idx, val_entries[idx]["file_name"], "gt", len(gt), "found", gt_hit.sum(),
+          "pred", len(final), "false", (~pr_hit).sum())
+    if len(final):
+        print("  best IoU of false predictions:", np.round(iou.max(1)[~pr_hit], 2),
+              "| of missed annotations:", np.round(iou.max(0)[~gt_hit], 2))
+
+
+def size_figure():
+    """Recall by annotated-filament area quartile, and why the missed ones are missed (from paper_size.py)."""
+    d = np.load(OUT.parent / "paper_oof" / "size.npz")
+    a = d["gt_area"]
+    e = np.quantile(a, [0, .25, .5, .75, 1])
+    e[-1] = np.inf
+    bins = [(a >= lo) & (a < hi) for lo, hi in zip(e[:-1], e[1:])]
+    labels = [f"<{e[1]:.0f}", f"{e[1]:.0f}-\n{e[2]:.0f}", f"{e[2]:.0f}-\n{e[3]:.0f}", f">{e[3]:.0f}"]
+    x = np.arange(4)
+    fig, (l, r) = plt.subplots(1, 2, figsize=(3.45, 1.85))
+    for k, (name, lab, col) in enumerate([("base4", "4 detectors", "#ff9100"), ("fullS", "Full system", "#1e88e5")]):
+        b = d[f"{name}_best"]
+        l.bar(x + (k - 0.5) * 0.38, [(b[g] > 0.5).mean() for g in bins], 0.38, color=col, label=lab)
+    l.set_ylabel("fraction found", fontsize=7)
+    l.set_ylim(0, 1)
+    l.legend(fontsize=6, frameon=False, loc="upper left")
+    b = d["fullS_best"]
+    none = [((b[g] <= 0.5) & (b[g] < 0.05)).sum() for g in bins]
+    part = [((b[g] <= 0.5) & (b[g] >= 0.05)).sum() for g in bins]
+    r.bar(x, none, 0.6, color="#9e9e9e", label="no overlap")
+    r.bar(x, part, 0.6, bottom=none, color="#ef5350", label="partial (IoU .05-.5)")
+    r.set_ylabel("missed filaments", fontsize=7)
+    r.set_ylim(0, 150)
+    r.legend(fontsize=6, frameon=False, loc="upper right")
+    for ax in (l, r):
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, fontsize=5.5)
+        ax.set_xlabel("annotated area (px)", fontsize=6.5)
+        ax.tick_params(labelsize=6)
+        ax.spines[["top", "right"]].set_visible(False)
+    fig.tight_layout(pad=0.2, w_pad=0.6)
+    fig.savefig(OUT / "fig_size.pdf")
+    fig.savefig(OUT / "fig_size.png", dpi=200)
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if what == "size":
+        size_figure()
+    if what.startswith("failure"):
+        failure(int(what.split(":")[1]) if ":" in what else 72)
     if what == "forest":
         forest()
     if what == "threshold":
