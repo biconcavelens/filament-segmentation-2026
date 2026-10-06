@@ -10,6 +10,7 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
+matplotlib.rcParams["pdf.fonttype"] = 42  # TrueType, not Type 3 (IEEE PDF checks)
 import matplotlib.pyplot as plt
 import numpy as np
 import pycocotools.mask as mu
