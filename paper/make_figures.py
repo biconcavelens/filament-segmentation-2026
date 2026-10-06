@@ -154,8 +154,42 @@ def overlap_figure():
     fig.savefig(OUT / "fig_overlap.png", dpi=200)
 
 
+def forest():
+    """Per-split PQ change vs the 4-detector ensemble with paired-bootstrap 95% intervals
+    (same bootstrap draws as paper_oof.py's summary)."""
+    d = OUT.parent / "paper_oof"
+    base = np.load(d / "base4.npz")["counts"]
+    rows = [("plainS", "+ semantic, no vote"), ("fuse4", "+ vote, 4 voters"), ("fuse12", "+ vote, 12 voters"),
+            ("lightS", "+ sem. leader, 5 voters"), ("fullS", "+ sem. leader, 13 voters")]
+    pq = lambda c: c[..., 0] / (c[..., 1] + 0.5 * c[..., 2] + 0.5 * c[..., 3])
+    n = base.shape[1]
+    boot = np.random.default_rng(0).integers(0, n, (2000, n))
+    fig, ax = plt.subplots(figsize=(3.45, 2.05))
+    ax.axvspan(-0.005, 0.005, color="#eeeeee", zorder=0)
+    ax.axvline(0, color="#777", lw=0.8, zorder=1)
+    for y, (key, label) in enumerate(rows[::-1]):
+        c = np.load(d / f"{key}.npz")["counts"]
+        for k in range(c.shape[0]):
+            diff = pq(c[k][boot].sum(1)) - pq(base[k][boot].sum(1))
+            lo, hi = np.percentile(diff, [2.5, 97.5])
+            mid = pq(c[k].sum(0)) - pq(base[k].sum(0))
+            yy = y + (k - 2) * 0.12
+            col = "#1e88e5" if lo > 0 else "#90a4ae"
+            ax.plot([lo, hi], [yy, yy], color=col, lw=1.0, zorder=2)
+            ax.plot(mid, yy, "o", ms=2.6, color=col, zorder=3)
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels([lab for _, lab in rows[::-1]], fontsize=6.5)
+    ax.set_xlabel("PQ change vs. 4-detector ensemble", fontsize=7)
+    ax.tick_params(axis="x", labelsize=6.5)
+    fig.tight_layout(pad=0.2)
+    fig.savefig(OUT / "fig_forest.pdf")
+    fig.savefig(OUT / "fig_forest.png", dpi=200)
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if what == "forest":
+        forest()
     if what in ("all", "pipeline"):
         pipeline()
     if what in ("all", "qualitative"):

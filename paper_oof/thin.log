@@ -1,0 +1,9 @@
+base4      r=2: thin cov 0.361 core cov 0.637 | matched: thin 0.441 core 0.813 | r=3 matched thin 0.578 | thin share of GT px 0.019 | TP 560
+base4_512  r=2: thin cov 0.364 core cov 0.638 | matched: thin 0.445 core 0.815 | r=3 matched thin 0.579 | thin share of GT px 0.019 | TP 562
+fuse4      r=2: thin cov 0.395 core cov 0.656 | matched: thin 0.478 core 0.832 | r=3 matched thin 0.616 | thin share of GT px 0.019 | TP 564
+fuse12     r=2: thin cov 0.407 core cov 0.661 | matched: thin 0.491 core 0.840 | r=3 matched thin 0.626 | thin share of GT px 0.019 | TP 569
+fullS      r=2: thin cov 0.432 core cov 0.694 | matched: thin 0.502 core 0.841 | r=3 matched thin 0.629 | thin share of GT px 0.019 | TP 600
+solo_S     r=2: thin cov 0.356 core cov 0.569 | matched: thin 0.498 core 0.845 | r=3 matched thin 0.631 | thin share of GT px 0.019 | TP 462
+near misses under base4: 96; matched under final: 15; baseline matches lost by final: 5; new matches from no/low overlap (<0.3): 30; mean best IoU of baseline matches: 0.682 -> 0.685
+  fuse4: near misses converted 11, baseline matches lost 7
+  fuse12: near misses converted 13, baseline matches lost 4
