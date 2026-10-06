@@ -216,7 +216,7 @@ if __name__ == "__main__":
     if what in ("all", "pipeline"):
         pipeline()
     if what in ("all", "qualitative"):
-        qualitative(37)
+        qualitative(83)
     if what in ("all", "calibration"):
         calibration()
     if what in ("all", "overlap"):
