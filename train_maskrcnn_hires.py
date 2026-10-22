@@ -35,6 +35,8 @@ def main():
     p.add_argument("--backbone", help="ResNet-50 body weights from pretrain_ssl.py (FPN/RPN/heads stay COCO)")
     p.add_argument("--all-data", action="store_true", help="train on train + validation images (final model; "
                                                            "no held-out data left, checkpoint name gets _all)")
+    p.add_argument("--resume", help="epoch checkpoint to continue after (weights only, momentum restarts; "
+                                    "lr schedule fast-forwarded). Needed after a mid-epoch cuDNN crash")
     p.add_argument("--neighbors", help="download_neighbors.py manifest: train on frames minutes before/after "
                                        "each training image with that image's labels")
     p.add_argument("--nb-p", type=float, default=0.5, help="probability a sample uses a neighbour frame")
@@ -66,10 +68,18 @@ def main():
     scaler = torch.amp.GradScaler("cuda")
     milestones = sorted({max(1, round(args.epochs * 0.7)), max(2, round(args.epochs * 0.9))})
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
+    start = 0
+    if args.resume:
+        ck = torch.load(args.resume, map_location="cpu")
+        model.load_state_dict(ck["model"])
+        start = ck["epoch"] + 1
+        for _ in range(start):
+            scheduler.step()
+        print(f"resumed from {args.resume}: continuing at epoch {start}, lr {optimizer.param_groups[0]['lr']:g}", flush=True)
     print(f"{name}: size {args.min_size}/{args.max_size} bs={args.batch_size} lr={lr} "
           f"cls_weight={args.cls_weight} steps/epoch={len(loader)}", flush=True)
 
-    for epoch in range(args.epochs):
+    for epoch in range(start, args.epochs):
         model.train()
         t0, running = time.time(), 0.0
         for i, (images, targets) in enumerate(loader):
