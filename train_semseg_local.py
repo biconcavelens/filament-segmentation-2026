@@ -65,7 +65,7 @@ def load():
     files = sorted(set(i["file_name"] for i in images))
     rng = random.Random(0)
     rng.shuffle(files)
-    val_files = set(files[:max(1, int(len(files) * 0.1))])
+    val_files = set() if os.environ.get("SEMSEG_ALL") == "1" else set(files[:max(1, int(len(files) * 0.1))])  # ALL: final model, no held-out data
     train = [i for i in images if i["file_name"] not in val_files]
     return train, sorted(val_files), per_image
 
