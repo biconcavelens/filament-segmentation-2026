@@ -23,9 +23,10 @@ MIN_SIZE = 800
 MAX_SIZE = 1333
 
 
-def build_model(num_classes=2):
+def build_model(num_classes=2, pretrained=True):
+    """pretrained=False: bare architecture for inference (the checkpoint supplies every weight; no download)."""
     model = maskrcnn_resnet50_fpn_v2(
-        weights=MaskRCNN_ResNet50_FPN_V2_Weights.COCO_V1,
+        weights=MaskRCNN_ResNet50_FPN_V2_Weights.COCO_V1 if pretrained else None,
         min_size=MIN_SIZE, max_size=MAX_SIZE,
     )
     in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -54,8 +55,8 @@ def build_model_v3(num_classes=2):
     return model
 
 
-def build_from_checkpoint(state: dict, num_classes=2):
-    model = build_model_v3(num_classes) if state.get("arch") == "v3" else build_model(num_classes)
+def build_from_checkpoint(state: dict, num_classes=2, pretrained=True):
+    model = build_model_v3(num_classes) if state.get("arch") == "v3" else build_model(num_classes, pretrained)
     if "min_size" in state:  # trained at a non-default input resolution (train_maskrcnn_hires.py)
         model.transform.min_size, model.transform.max_size = (state["min_size"],), state["max_size"]
     return model

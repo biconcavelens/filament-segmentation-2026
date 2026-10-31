@@ -9,7 +9,7 @@ watershed_cache/
 yolo_data/
 yolo_runs/
 runs/
-weights/
+/weights/
 scratch/
 scratch_notebooks/
 scratch_missed_filaments/
@@ -37,3 +37,7 @@ __pycache__/
 *.pkl
 *.partial
 *.done
+
+# final package: the weights the notebook loads must be in the repo
+!final/weights/*.pt
+!final/weights/*.json
