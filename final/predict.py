@@ -12,7 +12,9 @@ Per image:
 """
 import argparse
 import json
+import os
 import sys
+import time
 from pathlib import Path
 
 import cv2
@@ -135,23 +137,47 @@ def calibrate(cals, src):
 
 
 def main():
+    global WEIGHTS
     ap = argparse.ArgumentParser()
     ap.add_argument("--images", required=True)
     ap.add_argument("--out", default="submission.csv")
     ap.add_argument("--limit", type=int, default=0, help="only the first N images (smoke test)")
+    ap.add_argument("--pause-every", type=int, default=0, help="rest the GPU after this many images (overheating laptops)")
+    ap.add_argument("--pause-sec", type=int, default=60)
+    ap.add_argument("--weights", default=str(WEIGHTS), help="weight folder (final/weights_all = trained on train + validation)")
     a = ap.parse_args()
+    WEIGHTS = Path(a.weights)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cals = json.load(open(WEIGHTS / "calibrators.json"))
     models = load_models(device)
     paths = sorted(p for p in Path(a.images).iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
     paths = paths[:a.limit] if a.limit else paths
-    rows = []
+    rows, done = [], set()
+    done_file = Path(a.out + ".done")  # a crash costs one image: finished images are skipped on restart
+    if done_file.exists() and Path(a.out).exists():
+        try:
+            rows = pd.read_csv(a.out).to_dict("records")
+            done = set(done_file.read_text().split())
+        except Exception:  # a crash mid-write can leave a zero-filled CSV: start over rather than trust it
+            rows, done = [], set()
+            done_file.unlink()
     for i, path in enumerate(paths, 1):
+        if path.name in done:
+            continue
         pooled = calibrate(cals, sources_for(models, path, device))
         kept = paint_panoptic_rle(fuse_image(pooled, [FUSE], LEADERS)[FUSE])
         rows += [{"filament_id": f"{path.stem}_{k}", "segmentation_rle": r} for k, r in enumerate(kept, 1)]
         print(f"{i}/{len(paths)} {path.name}: {len(kept)} filaments", flush=True)
-        pd.DataFrame(rows, columns=["filament_id", "segmentation_rle"]).to_csv(a.out, index=False)  # resumable output
+        if a.pause_every and i % a.pause_every == 0:
+            time.sleep(a.pause_sec)
+        tmp = Path(a.out + ".tmp")  # write-then-rename: a crash never leaves a half-written CSV
+        with open(tmp, "w", newline="") as f:
+            pd.DataFrame(rows, columns=["filament_id", "segmentation_rle"]).to_csv(f, index=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, a.out)
+        with open(done_file, "a") as f:
+            f.write(path.name + "\n")
     print(f"wrote {a.out}: {len(rows)} rows, {len(paths)} images")
 
 

@@ -13,16 +13,25 @@ import torch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-OUT = ROOT / "final" / "weights"
-OUT.mkdir(exist_ok=True)
 
 SOURCES = ["Av", "B1280v", "Cv", "L1280v", "A", "B1280", "C", "L1280", "AF", "BF", "CF", "LF", "S"]
-FP32 = {"maskrcnn.pt": "kaggle_ds_v10/maskrcnn_hires2048_epoch5.pt",
-        "refiner256.pt": "kaggle_ds_v10/refiner_v10_resnet34_best.pt",
-        "refiner512.pt": "kaggle_ds_refiners/refiner_v10_resnet34_c512_best.pt",
-        "semseg.pt": "kaggle_out_semseg/semseg.pt"}
-ALREADY_HALF = {"yolo11m.pt": "kaggle_ds_v10/yolo11m_cls_best.pt", "rtdetr.pt": "kaggle_ds_v10/rtdetr_cls_best.pt",
-                "yolo11l.pt": "kaggle_ds_v10/yolo11l_cls_1280_best.pt"}
+# --all-data: the same models retrained on train + validation (calibrators stay the held-out ones)
+ALL = "--all-data" in sys.argv
+FP32 = ({"maskrcnn.pt": "checkpoints/maskrcnn_hires2048_all_epoch5.pt",
+         "refiner256.pt": "checkpoints/refiner_v10_resnet34_full_best.pt",
+         "refiner512.pt": "checkpoints/refiner_v10_resnet34_c512_full_epoch12.pt",
+         "semseg.pt": "semseg_all/semseg.pt"} if ALL else
+        {"maskrcnn.pt": "kaggle_ds_v10/maskrcnn_hires2048_epoch5.pt",
+         "refiner256.pt": "kaggle_ds_v10/refiner_v10_resnet34_best.pt",
+         "refiner512.pt": "kaggle_ds_refiners/refiner_v10_resnet34_c512_best.pt",
+         "semseg.pt": "kaggle_out_semseg/semseg.pt"})
+ALREADY_HALF = ({"yolo11m.pt": "kaggle_out_all/yolo11m/yolo11m_cls_all_best.pt",
+                 "rtdetr.pt": "kaggle_out_all/rtdetr/rtdetr_cls_all_best.pt",
+                 "yolo11l.pt": "kaggle_out_all/yolo11l/yolo11l_cls_1280_all_best.pt"} if ALL else
+                {"yolo11m.pt": "kaggle_ds_v10/yolo11m_cls_best.pt", "rtdetr.pt": "kaggle_ds_v10/rtdetr_cls_best.pt",
+                 "yolo11l.pt": "kaggle_ds_v10/yolo11l_cls_1280_best.pt"})
+OUT = ROOT / "final" / ("weights_all" if ALL else "weights")
+OUT.mkdir(exist_ok=True)
 
 
 def half(sd):
