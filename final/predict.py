@@ -66,7 +66,16 @@ def semantic_probs(model, gray, device):
     return p[0].astype(np.float32) / 255.0, p[1].astype(np.float32) / 255.0
 
 
+def join_parts():
+    """Weights over 60 MB are stored as <name>.pt.part0, .part1 (GitHub rejects slow single uploads): rejoin them once."""
+    for first in sorted(WEIGHTS.glob("*.pt.part0")):
+        out = first.with_suffix("")
+        if not out.exists():
+            out.write_bytes(b"".join(q.read_bytes() for q in sorted(WEIGHTS.glob(out.name + ".part*"))))
+
+
 def load_models(device):
+    join_parts()
     st = torch.load(WEIGHTS / "maskrcnn.pt", map_location="cpu")
     mrcnn = build_from_checkpoint(st, num_classes=2, pretrained=False)
     mrcnn.load_state_dict(st["model"])
