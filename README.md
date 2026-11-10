@@ -6,6 +6,33 @@ features) in GONG H-alpha full-disk observations, for the
 Scored by Panoptic Quality (PQ): `PQ = sum(IoU over matches) / (TP + 0.5*FP + 0.5*FN)`,
 match = IoU > 0.5.
 
+## Final submission (public leaderboard PQ 0.40)
+
+Everything needed to reproduce the submitted predictions is in this repository, including the model weights
+(`final/weights`, about 400 MB in float16; files over 60 MB are stored as `.part0/.part1` and rejoined automatically).
+
+```bash
+pip install -r requirements.txt
+python final/predict.py --images data/MAGFiLO_1.0_Kaggle_2026/test/test_images --out submission.csv
+```
+
+or run [`final/reproduce.ipynb`](final/reproduce.ipynb), which does the same and checks the output format.
+About 35 s per image on an RTX 4060 (8 GB); `--limit N` runs the first N images, `--pause-every N --pause-sec S`
+rests the GPU, and an interrupted run resumes from the images already written.
+
+Only the test image itself is used at inference. Per image:
+
+1. Four detectors (Mask R-CNN at 2048 px, YOLO11m-seg, RT-DETR-l and YOLO11l-seg at 1280 px) run on the image and on its mirror.
+2. A crop-level U-Net (ResNet34, spine head) redraws every proposal: 256 px and 512 px versions on the normal image, 256 px on the mirrored one.
+3. A ConvNeXt-Tiny U-Net segments the whole image; its connected components become instances.
+4. Isotonic calibration per source (`final/weights/calibrators.json`, fitted on held-out validation predictions), then
+   leaders (calibrated score >= 0.5, NMS IoU 0.05) take a score-weighted pixel vote of all overlapping masks; masks are painted without overlap.
+
+`final/make_weights.py` packs the trained checkpoints into `final/weights`. Retraining every component on train + validation
+scored 0.39 on the leaderboard (not better), so the submitted system uses the models trained on the training split only.
+Re-running `final/predict.py` from these weights reproduces the submitted CSV (176 of 177 images with the same number of filaments,
+99.8% of masks matched at IoU >= 0.9; the difference is one borderline candidate).
+
 ## Paper
 
 T. Mellimi, R. Bhargava, R. Gupta, "Instance Segmentation of Solar Filaments in GONG H-alpha Images
