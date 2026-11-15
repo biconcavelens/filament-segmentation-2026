@@ -179,7 +179,14 @@ Table~\ref{tab:abl} removes or changes one part of the system at a time, with th
 
 The lower part of the table varies which sources may create detections. The semantic model helps only when it may create detections: as a source of masks alone it leaves PQ at the level of the 12-source vote (0.457), while as a source of both it raises PQ to 0.461. The opposite holds for the 512-pixel refiner and the mirrored images. When their candidates may also create detections, PQ drops from 0.457 to 0.453 with the vote and to 0.448 without it, since they mostly add second copies of filaments that are already detected.
 
-The vote threshold is the share of the score-weighted masks a pixel needs in order to be kept (means over the five dependent splits, with the threshold itself chosen on the same validation images; the figure \texttt{fig\_threshold} in the repository plots them). Values between 0.3 and 0.5 give nearly the same PQ (0.460 to 0.461), and 0.6 is only slightly lower (0.457). Below 0.3 the masks become too large and SQ falls (0.678 at 0.2 against 0.683 at 0.3), and at 0.1 PQ drops to 0.433, below the four detectors without the vote.
+Fig.~\ref{fig:threshold} shows the effect of the vote threshold, the share of the score-weighted masks a pixel needs in order to be kept. Values between 0.3 and 0.5 give nearly the same PQ (0.460 to 0.461), and 0.6 is only slightly lower (0.457). Below 0.3 the masks become too large and SQ falls (0.678 at 0.2 against 0.683 at 0.3), and at 0.1 PQ drops to 0.433, below the four detectors without the vote.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_threshold.pdf}
+\caption{PQ of the full system as a function of the vote threshold (mean and standard deviation over the five dependent calibration splits; the bars are not confidence intervals). The dashed line is the four calibrated detectors without the vote. The threshold itself was chosen on the same validation images.}
+\label{fig:threshold}
+\end{figure}
 
 \begin{table}[t]
 \centering
@@ -255,8 +262,15 @@ The challenge also evaluates the distribution of IoU and Dice over all overlappi
 On one calibration split, the four detectors miss 325 of the 908 validation filaments. For 219 of them, one of the candidates does match the filament, but its calibrated score is below the acceptance threshold (median 0.33). For 67 there is no matching candidate at all, and 57 of these have a candidate with IoU between 0.3 and 0.5, typically a mask that stops before the faint end of the filament. The remaining 39 lose out to an overlapping candidate that is wrong. Lowering the acceptance threshold does not help. Candidates with scores between 0.3 and 0.5 are correct at most 32\% of the time, even when nine or more sources agree on them. A detection has to be correct about 34\% of the time to increase PQ.
 
 \subsection{Errors by filament size}
-We split the 908 validation filaments into four groups of equal size by annotated area, again on one calibration split (the figure \texttt{fig\_size} in the repository plots these numbers). The full system finds 52\% of the smallest filaments (below 644 pixels) and 76\% of those between 1,241 and 2,526 pixels. For the largest quarter the share drops again, to 68\%. The two ends fail in different ways. Of the 110 small filaments that the full system misses, 86 have no overlapping prediction at all, so they were simply not detected. Of the 72 missed large filaments, only 20 have no overlapping prediction, and for 38 the best prediction reaches an IoU between 0.3 and 0.5. Here the prediction and the annotation clearly describe the same filament but disagree about its extent, the same kind of disagreement we find between two annotators (Section~\ref{sec:annot}). The mask quality of matched filaments hardly depends on size (SQ between 0.68 and 0.70 in all four groups).
+Fig.~\ref{fig:size} splits the 908 validation filaments into four groups of equal size by annotated area, again on one calibration split. The full system finds 52\% of the smallest filaments (below 644 pixels) and 76\% of those between 1,241 and 2,526 pixels. For the largest quarter the share drops again, to 68\%. The two ends fail in different ways. Of the 110 small filaments that the full system misses, 86 have no overlapping prediction at all, so they were simply not detected. Of the 72 missed large filaments, only 20 have no overlapping prediction, and for 38 the best prediction reaches an IoU between 0.3 and 0.5. Here the prediction and the annotation clearly describe the same filament but disagree about its extent, the same kind of disagreement we find between two annotators (Section~\ref{sec:annot}). The mask quality of matched filaments hardly depends on size (SQ between 0.68 and 0.70 in all four groups).
 
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_size.pdf}
+\caption{Results by annotated filament area on one calibration split (quartiles of the 908 validation filaments). Left: fraction of annotated filaments found (IoU above 0.5). Right: filaments missed by the full system, split into those with no overlapping prediction and those with a partly overlapping one.}
+\label{fig:size}
+\end{figure}
 
 Fig.~\ref{fig:failure} shows both kinds of error on the validation image with the lowest PQ (0.21) among the images with at least ten annotated filaments. Three of the six unmatched predictions lie on annotated filaments but overlap them with an IoU between 0.30 and 0.48, so each of them counts once as a false positive and once as a missed filament. The other six missed filaments have no overlapping prediction, and several of them lie next to bright active regions.
 
@@ -340,7 +354,6 @@ We described a system for instance segmentation of solar filaments in GONG H$\al
 \section*{Acknowledgment}
 We thank the organizers of the IEEE BigData Cup 2026 Solar Filament Segmentation Challenge and the MAGFiLO team for providing the data. AI coding assistants were used to implement and run experiments and to draft text; all design decisions, results and claims were reviewed by the authors.
 
-{\footnotesize
 \begin{thebibliography}{99}
 \bibitem{harvey1996gong} J.~W. Harvey \emph{et al.}, ``The Global Oscillation Network Group (GONG) project,'' \emph{Science}, vol.~272, no.~5266, pp.~1284--1286, 1996.
 \bibitem{ahmadzadeh2024magfilo} A.~Ahmadzadeh \emph{et al.}, ``A dataset of manually annotated filaments from H-alpha observations,'' \emph{Scientific Data}, vol.~11, art.~1031, 2024.
@@ -376,6 +389,6 @@ We thank the organizers of the IEEE BigData Cup 2026 Solar Filament Segmentation
 \bibitem{nandy2021cycles} D.~Nandy, ``Progress in solar cycle predictions: Sunspot cycles 24--25 in perspective,'' \emph{Sol. Phys.}, vol.~296, art.~54, 2021.
 \bibitem{deng2009imagenet} J.~Deng, W.~Dong, R.~Socher, L.-J. Li, K.~Li, and L.~Fei-Fei, ``ImageNet: A large-scale hierarchical image database,'' in \emph{Proc. CVPR}, 2009, pp.~248--255.
 \bibitem{haralick1987morphology} R.~M. Haralick, S.~R. Sternberg, and X.~Zhuang, ``Image analysis using mathematical morphology,'' \emph{IEEE Trans. Pattern Anal. Mach. Intell.}, vol.~9, no.~4, pp.~532--550, 1987.
-\end{thebibliography}}
+\end{thebibliography}
 
 \end{document}
